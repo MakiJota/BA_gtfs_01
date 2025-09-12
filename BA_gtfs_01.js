@@ -1,0 +1,305 @@
+let comunas;
+let stops;
+let routes;
+let shapes;
+let trips;
+let stopTimes;
+
+let lonMin = -58.55, lonMax = -58.35;
+let latMin = -34.7, latMax = -34.55;
+
+// zoom/pan vars
+let zoom = 1;
+let offsetX = 0, offsetY = 0;
+let dragging = false;
+let lastX, lastY;
+
+// store comuna fill colors (avoid flashing)
+let comunaColors = [];
+
+// Buenos Aires Subte official colors
+const subteColors = {
+  'A': '#00AEEF',   // light blue
+  'B': '#DA291C',   // red
+  'C': '#003DA5',   // blue
+  'D': '#009739',   // green
+  'E': '#702082',   // purple
+  'H': '#FFD100'    // yellow
+};
+
+// ========== VAGONS ==========
+let shapePaths = {};  // shape_id → array of {x, y, seq}
+let vagons = [];      // each vagon: {shape_id, pos, speed, color}
+
+function preload() {
+  comunas   = loadJSON('assets/city/comunas.geojson.txt');
+  stops     = loadTable('assets/SUBTE/stops.txt', 'csv', 'header');
+  routes    = loadTable('assets/SUBTE/routes.txt', 'csv', 'header');
+  shapes    = loadTable('assets/SUBTE/shapes.txt', 'csv', 'header');
+  trips     = loadTable('assets/SUBTE/trips.txt', 'csv', 'header');
+  stopTimes = loadTable('assets/SUBTE/stop_times.txt', 'csv', 'header');
+}
+
+function setup() {
+  createCanvas(1200, 1200);
+  console.log("Setup complete.");
+
+  // assign static gray colors to comunas
+  if (comunas) {
+    for (let i = 0; i < comunas.features.length; i++) {
+      comunaColors[i] = color(random(180, 230), 200);
+    }
+  }
+
+  prepareShapePaths();
+  setupVagons();
+}
+
+// ========== DRAW LOOP ==========
+function draw() {
+  background(240);
+
+  // Apply zoom and pan
+  translate(width/2 + offsetX, height/2 + offsetY);
+  scale(zoom);
+  translate(-width/2, -height/2);
+
+  drawComunas();
+  drawSubteRoutes();
+  drawStops();
+  drawVagons();  // draw vagons on top
+}
+
+// ========== DRAWING FUNCTIONS ==========
+function drawComunas() {
+  if (!comunas) return;
+
+  noStroke();
+  for (let f = 0; f < comunas.features.length; f++) {
+    let feature = comunas.features[f];
+    let geom = feature.geometry;
+    fill(comunaColors[f]);
+
+    if (!geom) continue;
+
+    if (geom.type === "Polygon") {
+      drawPolygon(geom.coordinates);
+    } else if (geom.type === "MultiPolygon") {
+      for (let p = 0; p < geom.coordinates.length; p++) {
+        drawPolygon(geom.coordinates[p]);
+      }
+    }
+  }
+}
+
+function drawPolygon(coords) {
+  for (let r = 0; r < coords.length; r++) {
+    beginShape();
+    for (let i = 0; i < coords[r].length; i++) {
+      let lon = coords[r][i][0];
+      let lat = coords[r][i][1];
+
+      let x = map(lon, lonMin, lonMax, 50, width - 50);
+      let y = map(lat, latMin, latMax, height - 50, 50);
+
+      vertex(x, y);
+    }
+    endShape(CLOSE);
+  }
+}
+
+function drawSubteRoutes() {
+  if (!shapes) return;
+
+  strokeWeight(3);
+
+  // group shapes by ID
+  let shapesById = {};
+  for (let r = 0; r < shapes.getRowCount(); r++) {
+    let shape_id = shapes.getString(r, 'shape_id');
+    let lat = float(shapes.getString(r, 'shape_pt_lat'));
+    let lon = float(shapes.getString(r, 'shape_pt_lon'));
+    let seq = int(shapes.getString(r, 'shape_pt_sequence'));
+
+    if (!shapesById[shape_id]) shapesById[shape_id] = [];
+    shapesById[shape_id].push({lat, lon, seq});
+  }
+
+  // draw each shape
+  for (let shape_id in shapesById) {
+    let pts = shapesById[shape_id];
+    pts.sort((a,b) => a.seq - b.seq);
+
+    let lineLetter = shape_id.charAt(0); 
+    stroke(subteColors[lineLetter] || 'black');
+    noFill();
+
+    beginShape();
+    for (let pt of pts) {
+      let x = map(pt.lon, lonMin, lonMax, 50, width - 50);
+      let y = map(pt.lat, latMin, latMax, height - 50, 50);
+      vertex(x, y);
+    }
+    endShape();
+  }
+}
+
+function drawStops() {
+  if (!stops || !routes || !trips || !stopTimes) return;
+
+  let routeToLine = {};
+  for (let r = 0; r < routes.getRowCount(); r++) {
+    let route_id = routes.getString(r, 'route_id');
+    let route_short_name = routes.getString(r, 'route_short_name'); 
+    routeToLine[route_id] = route_short_name;
+  }
+
+  let tripToRoute = {};
+  for (let r = 0; r < trips.getRowCount(); r++) {
+    tripToRoute[trips.getString(r, 'trip_id')] = trips.getString(r, 'route_id');
+  }
+
+  let stopToRoute = {};
+  for (let r = 0; r < stopTimes.getRowCount(); r++) {
+    let stop_id = stopTimes.getString(r, 'stop_id');
+    let trip_id = stopTimes.getString(r, 'trip_id');
+    let route_id = tripToRoute[trip_id];
+    if (route_id) {
+      if (!stopToRoute[stop_id]) stopToRoute[stop_id] = route_id;
+    }
+  }
+
+  let seen = new Set();
+
+  stroke(0);
+  strokeWeight(1);
+  for (let r = 0; r < stops.getRowCount(); r++) {
+    let stop_id = stops.getString(r, 'stop_id');
+    let stop_name = stops.getString(r, 'stop_name');
+    let lat = float(stops.getString(r, 'stop_lat'));
+    let lon = float(stops.getString(r, 'stop_lon'));
+    if (isNaN(lat) || isNaN(lon)) continue;
+
+    if (seen.has(stop_name)) continue;
+    seen.add(stop_name);
+
+    let route_id = stopToRoute[stop_id];
+    let lineLetter = route_id ? routeToLine[route_id] : null;
+    if (!lineLetter || !subteColors[lineLetter]) continue;
+
+    fill(subteColors[lineLetter]);
+    let x = map(lon, lonMin, lonMax, 50, width - 50);
+    let y = map(lat, latMin, latMax, height - 50, 50);
+
+    stroke(0);
+    strokeWeight(0.5);
+    ellipse(x, y, 6, 6);
+  }
+}
+
+// ========== VAGONS ==========
+function prepareShapePaths() {
+  if (!shapes) return;
+  for (let r = 0; r < shapes.getRowCount(); r++) {
+    let shape_id = shapes.getString(r, 'shape_id');
+    let lat = float(shapes.getString(r, 'shape_pt_lat'));
+    let lon = float(shapes.getString(r, 'shape_pt_lon'));
+    let seq = int(shapes.getString(r, 'shape_pt_sequence'));
+
+    if (!shapePaths[shape_id]) shapePaths[shape_id] = [];
+    let x = map(lon, lonMin, lonMax, 50, width - 50);
+    let y = map(lat, latMin, latMax, height - 50, 50);
+    shapePaths[shape_id].push({x, y, seq});
+  }
+
+  for (let sid in shapePaths) {
+    shapePaths[sid].sort((a,b) => a.seq - b.seq);
+  }
+}
+
+function setupVagons() {
+  for (let shape_id in shapePaths) {
+    for (let i = 0; i < 3; i++) { // 3 trains per line
+      let lineLetter = shape_id.charAt(0);
+      let col = subteColors[lineLetter] || color(random(50, 255), random(50, 255), random(50, 255));
+      vagons.push({
+        shape_id: shape_id,
+        pos: random(),
+        speed: 0.001 + random(0,0.002),
+        color: col
+      });
+    }
+  }
+}
+
+function drawVagons() {
+  strokeWeight(1);
+  for (let v of vagons) {
+    let path = shapePaths[v.shape_id];
+    if (!path || path.length < 2) continue;
+
+    let total = path.length - 1;
+    let idxF = v.pos * total;
+    let idx = floor(idxF);
+    let t = idxF - idx;
+
+    let p1 = path[idx];
+    let p2 = path[min(idx+1, total)];
+
+    let x = lerp(p1.x, p2.x, t);
+    let y = lerp(p1.y, p2.y, t);
+
+    fill(v.color);
+    stroke(0);
+    ellipse(x, y, 8, 8);
+
+    v.pos += v.speed;
+    if (v.pos > 1) v.pos = 0;
+  }
+}
+
+// ========== INTERACTIVITY ==========
+function mouseWheel(event) {
+  zoom *= (event.delta > 0) ? 0.9 : 1.1;
+  return false;
+}
+
+function mousePressed() {
+  dragging = true;
+  lastX = mouseX;
+  lastY = mouseY;
+}
+
+function mouseReleased() {
+  dragging = false;
+}
+
+function mouseDragged() {
+  if (dragging) {
+    offsetX += (mouseX - lastX);
+    offsetY += (mouseY - lastY);
+    lastX = mouseX;
+    lastY = mouseY;
+  }
+}
+
+function draw() {
+  background(240);
+
+  // Draw fixed title first
+  noStroke();
+  fill(0);
+  textSize(24);
+  textAlign(LEFT, TOP);
+  text("Buenos Aires Subte Map", 10, 10);  // top-left corner
+
+  // Apply zoom and pan for map
+  translate(width/2 + offsetX, height/2 + offsetY);
+  scale(zoom);
+  translate(-width/2, -height/2);
+
+  drawComunas();
+  drawSubteRoutes();
+  drawStops();
+  drawVagons();
+}
