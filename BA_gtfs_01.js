@@ -1,12 +1,64 @@
-let comunas;
-let stops;
-let routes;
-let shapes;
-let trips;
-let stopTimes;
 
-let lonMin = -58.55, lonMax = -58.35;
-let latMin = -34.7, latMax = -34.55;
+let comunas, stops, routes, shapes, trips, stopTimes;
+let lonMin, lonMax, latMin, latMax;
+let subteColors; 
+let titleText;
+
+let buttonBA, buttonNYC;
+
+// ================== CONFIG ==================
+//let city = "NYC"; // <-- change to "NYC" to switch
+let city = "BA"; // <-- change to "NYC" to switch
+
+const cityConfigs = {
+  "BA": {
+    folder: "assets/BA/",
+    lonMin: -58.55, lonMax: -58.35,
+    latMin: -34.7, latMax: -34.55,
+    title: "Buenos Aires Subte Map",
+    colors: {
+      'A': '#00AEEF',   // light blue
+      'B': '#DA291C',   // red
+      'C': '#003DA5',   // blue
+      'D': '#009739',   // green
+      'E': '#702082',   // purple
+      'H': '#FFD100'    // yellow
+    }
+  },
+  "NYC": {
+    folder: "assets/NYC/",
+    lonMin: -74.05, lonMax: -73.75,
+    latMin: 40.63,  latMax: 40.85,
+    title: "New York City Subway Map",
+    colors: {
+      '1': '#EE352E', 
+      '2': '#EE352E', 
+      '3': '#EE352E',   // Red lines
+      '4': '#00933C', 
+      '5': '#00933C', 
+      '6': '#00933C',   // Green lines
+      '7': '#B933AD',                                  // Purple
+      'A': '#2850AD', 
+      'C': '#2850AD', 
+      'E': '#2850AD',   // Blue
+      'B': '#FF6319',
+      'D': '#FF6319', 
+      'F': '#FF6319', 
+      'M': '#FF6319', // Orange
+      'G': '#6CBE45',                                   // Light green
+      'J': '#996633', 'Z': '#996633',                   // Brown
+      'L': '#A7A9AC',                                   // Gray
+      'N': '#FCCC0A', 
+      'Q': '#FCCC0A', 
+      'R': '#FCCC0A',
+      'W': '#FCCC0A', // Yellow
+      'S': '#808183'                                    // Shuttle (dark gray)
+    }
+  }
+};
+
+// Active config
+let cfg = cityConfigs[city];
 
 // zoom/pan vars
 let zoom = 1;
@@ -17,36 +69,38 @@ let lastX, lastY;
 // store comuna fill colors (avoid flashing)
 let comunaColors = [];
 
-// Buenos Aires Subte official colors
-const subteColors = {
-  'A': '#00AEEF',   // light blue
-  'B': '#DA291C',   // red
-  'C': '#003DA5',   // blue
-  'D': '#009739',   // green
-  'E': '#702082',   // purple
-  'H': '#FFD100'    // yellow
-};
+
 
 // ========== VAGONS ==========
 let shapePaths = {};  // shape_id → array of {x, y, seq}
 let vagons = [];      // each vagon: {shape_id, pos, speed, color}
 
 function preload() {
-  comunas   = loadJSON('assets/city/comunas.geojson.txt');
-  stops     = loadTable('assets/SUBTE/stops.txt', 'csv', 'header');
-  routes    = loadTable('assets/SUBTE/routes.txt', 'csv', 'header');
-  shapes    = loadTable('assets/SUBTE/shapes.txt', 'csv', 'header');
-  trips     = loadTable('assets/SUBTE/trips.txt', 'csv', 'header');
-  stopTimes = loadTable('assets/SUBTE/stop_times.txt', 'csv', 'header');
+  city_limit   = loadJSON(cfg.folder + 'limit.geojson');
+  stops     = loadTable(cfg.folder + 'GTFS/stops.txt', 'csv', 'header');
+  routes    = loadTable(cfg.folder + 'GTFS/routes.txt', 'csv', 'header');
+  shapes    = loadTable(cfg.folder + 'GTFS/shapes.txt', 'csv', 'header');
+  trips     = loadTable(cfg.folder + 'GTFS/trips.txt', 'csv', 'header');
+  stopTimes = loadTable(cfg.folder + 'GTFS/stop_times.txt', 'csv', 'header');
 }
+
+
 
 function setup() {
   createCanvas(1200, 1200);
-  console.log("Setup complete.");
+  console.log("Setup complete for " + city);
 
-  // assign static gray colors to comunas
-  if (comunas) {
-    for (let i = 0; i < comunas.features.length; i++) {
+  lonMin = cfg.lonMin;
+  lonMax = cfg.lonMax;
+  latMin = cfg.latMin;
+  latMax = cfg.latMax;
+  subteColors = cfg.colors;
+  titleText = cfg.title;
+
+  if (city_limit) {
+    for (let i = 0; 
+    i < city_limit.features.length; 
+    i++) {
       comunaColors[i] = color(random(180, 230), 200);
     }
   }
@@ -59,7 +113,14 @@ function setup() {
 function draw() {
   background(240);
 
-  // Apply zoom and pan
+  // Draw title
+  noStroke();
+  fill(0);
+  textSize(24);
+  textAlign(LEFT, TOP);
+  text(titleText, 10, 10);
+
+  // Apply zoom/pan
   translate(width/2 + offsetX, height/2 + offsetY);
   scale(zoom);
   translate(-width/2, -height/2);
@@ -67,16 +128,17 @@ function draw() {
   drawComunas();
   drawSubteRoutes();
   drawStops();
-  drawVagons();  // draw vagons on top
+  drawVagons();
 }
+
 
 // ========== DRAWING FUNCTIONS ==========
 function drawComunas() {
-  if (!comunas) return;
+  if (!city_limit) return;
 
   noStroke();
-  for (let f = 0; f < comunas.features.length; f++) {
-    let feature = comunas.features[f];
+  for (let f = 0; f < city_limit.features.length; f++) {
+    let feature = city_limit.features[f];
     let geom = feature.geometry;
     fill(comunaColors[f]);
 
@@ -282,24 +344,4 @@ function mouseDragged() {
     lastY = mouseY;
   }
 }
-
-function draw() {
-  background(240);
-
-  // Draw fixed title first
-  noStroke();
-  fill(0);
-  textSize(24);
-  textAlign(LEFT, TOP);
-  text("Buenos Aires Subte Map", 10, 10);  // top-left corner
-
-  // Apply zoom and pan for map
-  translate(width/2 + offsetX, height/2 + offsetY);
-  scale(zoom);
-  translate(-width/2, -height/2);
-
-  drawComunas();
-  drawSubteRoutes();
-  drawStops();
-  drawVagons();
-}
+  
