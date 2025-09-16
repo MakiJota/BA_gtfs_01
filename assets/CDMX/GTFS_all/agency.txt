@@ -1,9 +1,0 @@
-﻿agency_id,agency_name,agency_url,agency_timezone,agency_lang,agency_phone
-CC,Corredores Concesionados,http://www.semovi.df.gob.mx/,America/Mexico_City,ES,
-MB,Metrobús,http://www.metrobus.df.gob.mx/,America/Mexico_City,ES,
-METRO,Sistema de Transporte Colectivo Metro,http://www.metro.df.gob.mx/,America/Mexico_City,ES,
-NCC,NOCHEBÚS Corredores concesionados,http://www.semovi.df.gob.mx/,America/Mexico_City,ES,
-RTP,Red de Transporte de Pasajeros,http://www.rtp.gob.mx/,America/Mexico_City,ES,
-RTP_ESP,RTP Regresa seguro a casa,http://www.rtp.gob.mx/,America/Mexico_City,ES,
-STE,Servicio de Transportes Eléctricos,http://www.ste.df.gob.mx/,America/Mexico_City,ES,
-SUB,Ferrocarriles Suburbanos,http://www.fsuburbanos.com/,America/Mexico_City,ES,

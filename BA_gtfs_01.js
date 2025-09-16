@@ -62,50 +62,90 @@ const cityConfigs = {
     folder: "assets/CDMX/",
     lonMin: -99.35, lonMax: -98.90,  // bounding box for Mexico City
     latMin: 19.20,  latMax: 19.60,
-    title: "Ciudad de México - Red de Transporte Público",
+    title: "Ciudad de México - Metro",
     colors: {
       // Metro
-      '1':  '#f94f8e',
-      '2':  '#0072c6',
-      '3':  '#ad9b0c',
-      '4':  '#7fbcaa',
-      '5':  '#f9d616',
-      '6':  '#d81e05',
-      '7':  '#e87511',
-      '8':  '#118749',
-      '9':  '#512826',
-      'A':  '#a02d96',
-      'B':  '#118751',
-      '12': '#b99e51',
+      'SH0200L1000_1':  '#f94f8e',
+      'SH0200L2000_1':  '#0072c6',
+      'SH0200L3000_1':  '#ad9b0c',
+      'SH0200L4000_1':  '#7fbcaa',
+      'SH0200L5000_1':  '#f9d616',
+      'SH0200L6000_1':  '#d81e05',
+      'SH0200L7000_1':  '#e87511',
+      'SH0200L8000_1':  '#118749',
+      'SH0200L9000_1':  '#512826',
+      'SH0200LA000_1':  '#a02d96',
+      'SH0200LB000_1':  '#118751',
+      'SH020L12000_1':  '#b99e51',
+      
+      
+      'SH0200L1000_0':  '#f94f8e',
+      'SH0200L2000_0':  '#0072c6',
+      'SH0200L3000_0':  '#ad9b0c',
+      'SH0200L4000_0':  '#7fbcaa',
+      'SH0200L5000_0':  '#f9d616',
+      'SH0200L6000_0':  '#d81e05',
+      'SH0200L7000_0':  '#e87511',
+      'SH0200L8000_0':  '#118749',
+      'SH0200L9000_0':  '#512826',
+      'SH0200LA000_0':  '#a02d96',
+      'SH0200LB000_0':  '#118751',
+      'SH020L12000_0':  '#b99e51'
+      //,
 
-      // Metrobús
-      'MB1': '#d40d0d',
-      'MB2': '#8d1a96',
-      'MB3': '#13a810',
-      'MB4': '#ff9a03',
-      'MB5': '#141982',
-      'MB6': '#e44599',
-      'MB7': '#116633',
+//1: CMX0200L2 SH0200L2000_1
+// 2: CMX0200L2 SH0200L2000_0
+// 3: CMX0200L3 SH0200L3000_1
+// 4: CMX0200L3 SH0200L3000_0
+// 5: CMX0200L4 SH0200L4000_1
+// 6: CMX0200L4 SH0200L4000_0
+// 7: CMX0200L5 SH0200L5000_1
+// 8: CMX0200L5 SH0200L5000_0
+// 9: CMX0200L6 SH0200L6000_1
+//10: CMX0200L6 SH0200L6000_0
+//11: CMX0200L7 SH0200L7000_1
+//12: CMX0200L7 SH0200L7000_0
+//13: CMX0200L8 SH0200L8000_1
+//14: CMX0200L8 SH0200L8000_0
+//15: CMX0200LA SH0200LA000_1
+//16: CMX0200LA SH0200LA000_0
+//17: CMX0200LB SH0200LB000_1
+//18: CMX0200LB SH0200LB000_0
+//19: CMX0200L1 SH0200L1000_1
+//20: CMX0200L1 SH0200L1000_0
+//21: CMX020L12 SH020L12000_1
+//22: CMX020L12 SH020L12000_0
+//23: CMX0200L9 SH0200L9000_1
+//24: CMX0200L9 SH0200L9000_0
 
-      // Trolebús (STE)
-      'STE-CCE2': '#2dad18',
-      'STE-CCE1': '#17a61d',
-      'STE-CCE3': '#92d037',
-      'STE-CP':   '#007eff',
-      'STE-K1':   '#ff00fe',
-      'STE-LL':   '#00fff6',
-      'STE-TL1':  '#1f5af0',
-      'STE-I':    '#7c30d4',
-      'STE-G':    '#ffa800',
+//      // Metrobús
+//      'MB1': '#d40d0d',
+//      'MB2': '#8d1a96',
+//      'MB3': '#13a810',
+//      'MB4': '#ff9a03',
+//      'MB5': '#141982',
+//      'MB6': '#e44599',
+//      'MB7': '#116633',
 
-      // RTP (many use the same orange)
-      'RTP': '#f27b0d',
-      'RTP-Expreso': '#33c919',
-      'RTP-Bicentenario': '#339c19',
-      'ECOBUS': '#99ff48',
+//      // Trolebús (STE)
+//      'STE-CCE2': '#2dad18',
+//      'STE-CCE1': '#17a61d',
+//      'STE-CCE3': '#92d037',
+//      'STE-CP':   '#007eff',
+//      'STE-K1':   '#ff00fe',
+//      'STE-LL':   '#00fff6',
+//      'STE-TL1':  '#1f5af0',
+//      'STE-I':    '#7c30d4',
+//      'STE-G':    '#ffa800',
 
-      // Suburban train
-      'SUB1': '#ef1a1a'
+//      // RTP (many use the same orange)
+//      'RTP': '#f27b0d',
+//      'RTP-Expreso': '#33c919',
+//      'RTP-Bicentenario': '#339c19',
+//      'ECOBUS': '#99ff48',
+
+//      // Suburban train
+//      'SUB1': '#ef1a1a'
     }
   },
     "BE": {
@@ -268,11 +308,24 @@ function drawSubteRoutes() {
 
   // draw each shape
   for (let shape_id in shapesById) {
+    console.log("Drawing shape:", shape_id);
     let pts = shapesById[shape_id];
     pts.sort((a,b) => a.seq - b.seq);
 
-    let lineLetter = shape_id.charAt(0); 
+    
+    if (city === "BA" || city === "NYC" || city === "BE") {
+      // For these cities, the first character or line code works
+      lineLetter = shape_id.charAt(0);
+    } else if (city === "CDMX") {
+      // For CDMX, the full shape_id is used as the key
+      lineLetter = shape_id;
+    }
+
+    // Use lineLetter to get the color
     stroke(subteColors[lineLetter] || 'black');
+    
+    console.log("actual label", lineLetter);
+    
     noFill();
 
     beginShape();
@@ -284,10 +337,10 @@ function drawSubteRoutes() {
     endShape();
   }
 }
-
 function drawStops() {
   if (!stops || !routes || !trips || !stopTimes) return;
 
+  // Map route_id → route_short_name
   let routeToLine = {};
   for (let r = 0; r < routes.getRowCount(); r++) {
     let route_id = routes.getString(r, 'route_id');
@@ -295,18 +348,20 @@ function drawStops() {
     routeToLine[route_id] = route_short_name;
   }
 
+  // Map trip_id → route_id
   let tripToRoute = {};
   for (let r = 0; r < trips.getRowCount(); r++) {
     tripToRoute[trips.getString(r, 'trip_id')] = trips.getString(r, 'route_id');
   }
 
+  // Map stop_id → route_id (via stop_times)
   let stopToRoute = {};
   for (let r = 0; r < stopTimes.getRowCount(); r++) {
     let stop_id = stopTimes.getString(r, 'stop_id');
     let trip_id = stopTimes.getString(r, 'trip_id');
     let route_id = tripToRoute[trip_id];
-    if (route_id) {
-      if (!stopToRoute[stop_id]) stopToRoute[stop_id] = route_id;
+    if (route_id && !stopToRoute[stop_id]) {
+      stopToRoute[stop_id] = route_id;
     }
   }
 
@@ -314,6 +369,7 @@ function drawStops() {
 
   stroke(0);
   strokeWeight(1);
+
   for (let r = 0; r < stops.getRowCount(); r++) {
     let stop_id = stops.getString(r, 'stop_id');
     let stop_name = stops.getString(r, 'stop_name');
@@ -325,7 +381,15 @@ function drawStops() {
     seen.add(stop_name);
 
     let route_id = stopToRoute[stop_id];
-    let lineLetter = route_id ? routeToLine[route_id] : null;
+    let lineLetter = null;
+
+    if (city === "BA" || city === "NYC" || city === "BE") {
+      if (route_id) lineLetter = routeToLine[route_id].charAt(0);
+    } else if (city === "CDMX") {
+      // ⬇️ NEW: use line_id column directly
+      lineLetter = stops.getString(r, 'line_id');
+    }
+
     if (!lineLetter || !subteColors[lineLetter]) continue;
 
     fill(subteColors[lineLetter]);
@@ -334,9 +398,11 @@ function drawStops() {
 
     stroke(0);
     strokeWeight(0.5);
-    ellipse(x, y, 6, 6);
+    rectMode(CENTER);
+    rect(x, y, 6, 6);
   }
 }
+
 
 // ========== VAGONS ==========
 function prepareShapePaths() {
@@ -360,8 +426,19 @@ function prepareShapePaths() {
 
 function setupVagons() {
   for (let shape_id in shapePaths) {
-    for (let i = 0; i < 3; i++) { // 3 trains per line
+    for (let i = 0; i < 5; i++) { // 3 trains per line
       let lineLetter = shape_id.charAt(0);
+      
+          if (city === "BA" || city === "NYC" || city === "BE") {
+      // For these cities, the first character or line code works
+      lineLetter = shape_id.charAt(0);
+    } else if (city === "CDMX") {
+      // For CDMX, the full shape_id is used as the key
+      lineLetter = shape_id;
+    }
+      
+      
+      
       let col = subteColors[lineLetter] || color(random(50, 255), random(50, 255), random(50, 255));
       vagons.push({
         shape_id: shape_id,
