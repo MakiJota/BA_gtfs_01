@@ -4,12 +4,15 @@ let lonMin, lonMax, latMin, latMax;
 let subteColors; 
 let titleText;
 
-let buttonBA, buttonNYC;
+let buttonBA, buttonNYC, buttonCDMX,  buttonBE;
 
 // ================== CONFIG ==================
 //let city = "NYC"; // <-- change to "NYC" to switch
-let city = "BA"; // <-- change to "NYC" to switch
+//let city = "BA"; // <-- change to "BA" to switch
+//let city = "CDMX"; // <-- change to "CDMX" to switch
+//let city = "BE"; // <-- change to BE" to switch
 
+let city = "CDMX";
 const cityConfigs = {
   "BA": {
     folder: "assets/BA/",
@@ -54,8 +57,84 @@ const cityConfigs = {
       'W': '#FCCC0A', // Yellow
       'S': '#808183'                                    // Shuttle (dark gray)
     }
+  },
+  "CDMX": {
+    folder: "assets/CDMX/",
+    lonMin: -99.35, lonMax: -98.90,  // bounding box for Mexico City
+    latMin: 19.20,  latMax: 19.60,
+    title: "Ciudad de México - Red de Transporte Público",
+    colors: {
+      // Metro
+      '1':  '#f94f8e',
+      '2':  '#0072c6',
+      '3':  '#ad9b0c',
+      '4':  '#7fbcaa',
+      '5':  '#f9d616',
+      '6':  '#d81e05',
+      '7':  '#e87511',
+      '8':  '#118749',
+      '9':  '#512826',
+      'A':  '#a02d96',
+      'B':  '#118751',
+      '12': '#b99e51',
+
+      // Metrobús
+      'MB1': '#d40d0d',
+      'MB2': '#8d1a96',
+      'MB3': '#13a810',
+      'MB4': '#ff9a03',
+      'MB5': '#141982',
+      'MB6': '#e44599',
+      'MB7': '#116633',
+
+      // Trolebús (STE)
+      'STE-CCE2': '#2dad18',
+      'STE-CCE1': '#17a61d',
+      'STE-CCE3': '#92d037',
+      'STE-CP':   '#007eff',
+      'STE-K1':   '#ff00fe',
+      'STE-LL':   '#00fff6',
+      'STE-TL1':  '#1f5af0',
+      'STE-I':    '#7c30d4',
+      'STE-G':    '#ffa800',
+
+      // RTP (many use the same orange)
+      'RTP': '#f27b0d',
+      'RTP-Expreso': '#33c919',
+      'RTP-Bicentenario': '#339c19',
+      'ECOBUS': '#99ff48',
+
+      // Suburban train
+      'SUB1': '#ef1a1a'
+    }
+  },
+    "BE": {
+    folder: "assets/BE/",
+    lonMin: 13.05, lonMax: 13.85,   // bounding box for Berlin
+    latMin: 52.30, latMax: 52.65,
+    title: "Berlin – S-Bahn Network",
+    colors: {
+      'S1':  '#a1232b', // dark red
+      'S2':  '#00824b', // green
+      'S25': '#5abf61', // light green
+      'S26': '#63d196', // mint green
+      'S3':  '#ea6815', // orange
+      'S41': '#ba9f67', // brown-beige (ring clockwise)
+      'S42': '#9f7c32', // brown (ring counter-clockwise)
+      'S45': '#a2268a', // purple
+      'S46': '#e73547', // pink-red
+      'S47': '#f5b21e', // yellow
+      'S5':  '#f5b21e', // same yellow as S47
+      'S7':  '#5a62d4', // blue
+      'S75': '#3670b2', // darker blue
+      'S8':  '#c84c98', // magenta
+      'S85': '#6f4e9e', // violet
+      'S9':  '#009ac7'  // cyan
+    }
   }
 };
+
+  
 
 // Active config
 let cfg = cityConfigs[city];
