@@ -1,0 +1,16 @@
+{
+  "folder": "assets/BA/",
+  "lonMin": -58.55,
+  "lonMax": -58.35,
+  "latMin": -34.7,
+  "latMax": -34.55,
+  "title": "Buenos Aires Subte Map",
+  "colors": {
+    "A": "#00AEEF",
+    "B": "#DA291C",
+    "C": "#003DA5",
+    "D": "#009739",
+    "E": "#702082",
+    "H": "#FFD100"
+  }
+}

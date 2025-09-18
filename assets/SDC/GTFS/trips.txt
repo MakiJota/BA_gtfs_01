@@ -1,0 +1,139 @@
+route_id,service_id,trip_id,trip_headsign,direction_id,shape_id
+L1,D,L1-I-D-M08,Los Domínicos,0,L1-I
+L1,L,L1-I-L-M01,Los Domínicos,0,L1-I
+L1,L,L1-I-L-M02,Los Domínicos,0,L1-I
+L1,L,L1-I-L-M03,Los Domínicos,0,L1-I
+L1,L,L1-I-L-M04,Los Domínicos,0,L1-I
+L1,L,L1-I-L-M05,Los Domínicos,0,L1-I
+L1,L,L1-I-L-M06,Los Domínicos,0,L1-I
+L1,S,L1-I-S-M07,Los Domínicos,0,L1-I
+L1,D,L1-R-D-M08,San Pablo,1,L1-R
+L1,L,L1-R-L-M01,San Pablo,1,L1-R
+L1,L,L1-R-L-M02,San Pablo,1,L1-R
+L1,L,L1-R-L-M03,San Pablo,1,L1-R
+L1,L,L1-R-L-M04,San Pablo,1,L1-R
+L1,L,L1-R-L-M05,San Pablo,1,L1-R
+L1,L,L1-R-L-M06,San Pablo,1,L1-R
+L1,S,L1-R-S-M07,San Pablo,1,L1-R
+L2,D,L2-I-D-M08,Hospital El Pino,0,L2-I
+L2R,L,L2R-I-L-M01,Hospital El Pino,0,L2R-I
+L2V,L,L2V-I-L-M01,Hospital El Pino,0,L2V-I
+L2R,L,L2R-I-L-M02,Hospital El Pino,0,L2R-I
+L2V,L,L2V-I-L-M02,Hospital El Pino,0,L2V-I
+L2,L,L2-I-L-M03,Hospital El Pino,0,L2-I
+L2R,L,L2R-I-L-M04,Hospital El Pino,0,L2R-I
+L2V,L,L2V-I-L-M04,Hospital El Pino,0,L2V-I
+L2R,L,L2R-I-L-M05,Hospital El Pino,0,L2R-I
+L2V,L,L2V-I-L-M05,Hospital El Pino,0,L2V-I
+L2,L,L2-I-L-M06,Hospital El Pino,0,L2-I
+L2,S,L2-I-S-M07,Hospital El Pino,0,L2-I
+L2,D,L2-R-D-M08,Vespucio Norte,1,L2-R
+L2R,L,L2R-R-L-M01,Vespucio Norte,1,L2R-R
+L2V,L,L2V-R-L-M01,Vespucio Norte,1,L2V-R
+L2R,L,L2R-R-L-M02,Vespucio Norte,1,L2R-R
+L2V,L,L2V-R-L-M02,Vespucio Norte,1,L2V-R
+L2,L,L2-R-L-M03,Vespucio Norte,1,L2-R
+L2R,L,L2R-R-L-M04,Vespucio Norte,1,L2R-R
+L2V,L,L2V-R-L-M04,Vespucio Norte,1,L2V-R
+L2R,L,L2R-R-L-M05,Vespucio Norte,1,L2R-R
+L2V,L,L2V-R-L-M05,Vespucio Norte,1,L2V-R
+L2,L,L2-R-L-M06,Vespucio Norte,1,L2-R
+L2,S,L2-R-S-M07,Vespucio Norte,1,L2-R
+L3,L,L3-I-L-M01,Fernando Castillo Velasco,0,L3-I
+L3,L,L3-I-L-M02,Fernando Castillo Velasco,0,L3-I
+L3,L,L3-I-L-M03,Fernando Castillo Velasco,0,L3-I
+L3,L,L3-I-L-M04,Fernando Castillo Velasco,0,L3-I
+L3,L,L3-I-L-M05,Fernando Castillo Velasco,0,L3-I
+L3,L,L3-I-L-M06,Fernando Castillo Velasco,0,L3-I
+L3,L,L3-I-L-M07,Fernando Castillo Velasco,0,L3-I
+L3,S,L3-I-S-M08,Fernando Castillo Velasco,0,L3-I
+L3,D,L3-I-D-M09,Fernando Castillo Velasco,0,L3-I
+L3,L,L3-R-L-M01,Plaza Quilicura,1,L3-R
+L3,L,L3-R-L-M02,Plaza Quilicura,1,L3-R
+L3,L,L3-R-L-M03,Plaza Quilicura,1,L3-R
+L3,L,L3-R-L-M04,Plaza Quilicura,1,L3-R
+L3,L,L3-R-L-M05,Plaza Quilicura,1,L3-R
+L3,L,L3-R-L-M06,Plaza Quilicura,1,L3-R
+L3,L,L3-R-L-M07,Plaza Quilicura,1,L3-R
+L3,S,L3-R-S-M08,Plaza Quilicura,1,L3-R
+L3,D,L3-R-D-M09,Plaza Quilicura,1,L3-R
+L4,D,L4-I-D-M08,Plaza Puente Alto,0,L4-I
+L4R,L,L4R-I-L-M01,Plaza Puente Alto,0,L4R-I
+L4V,L,L4V-I-L-M01,Plaza Puente Alto,0,L4V-I
+L4R,L,L4R-I-L-M02,Plaza Puente Alto,0,L4R-I
+L4V,L,L4V-I-L-M02,Plaza Puente Alto,0,L4V-I
+L4,L,L4-I-L-M03,Plaza Puente Alto,0,L4-I
+L4R,L,L4R-I-L-M04,Plaza Puente Alto,0,L4R-I
+L4V,L,L4V-I-L-M04,Plaza Puente Alto,0,L4V-I
+L4R,L,L4R-I-L-M05,Plaza Puente Alto,0,L4R-I
+L4V,L,L4V-I-L-M05,Plaza Puente Alto,0,L4V-I
+L4,L,L4-I-L-M06,Plaza Puente Alto,0,L4-I
+L4,S,L4-I-S-M07,Plaza Puente Alto,0,L4-I
+L4,D,L4-R-D-M08,Tobalaba,1,L4-R
+L4R,L,L4R-R-L-M01,Tobalaba,1,L4R-R
+L4V,L,L4V-R-L-M01,Tobalaba,1,L4V-R
+L4R,L,L4R-R-L-M02,Tobalaba,1,L4R-R
+L4V,L,L4V-R-L-M02,Tobalaba,1,L4V-R
+L4,L,L4-R-L-M03,Tobalaba,1,L4-R
+L4R,L,L4R-R-L-M04,Tobalaba,1,L4R-R
+L4V,L,L4V-R-L-M04,Tobalaba,1,L4V-R
+L4R,L,L4R-R-L-M05,Tobalaba,1,L4R-R
+L4V,L,L4V-R-L-M05,Tobalaba,1,L4V-R
+L4,L,L4-R-L-M06,Tobalaba,1,L4-R
+L4,S,L4-R-S-M07,Tobalaba,1,L4-R
+L4A,D,L4A-I-D-M08,La Cisterna,0,L4A-I
+L4A,L,L4A-I-L-M01,La Cisterna,0,L4A-I
+L4A,L,L4A-I-L-M02,La Cisterna,0,L4A-I
+L4A,L,L4A-I-L-M03,La Cisterna,0,L4A-I
+L4A,L,L4A-I-L-M04,La Cisterna,0,L4A-I
+L4A,L,L4A-I-L-M05,La Cisterna,0,L4A-I
+L4A,L,L4A-I-L-M06,La Cisterna,0,L4A-I
+L4A,S,L4A-I-S-M07,La Cisterna,0,L4A-I
+L4A,D,L4A-R-D-M08,Vicuña Mackenna,1,L4A-R
+L4A,L,L4A-R-L-M01,Vicuña Mackenna,1,L4A-R
+L4A,L,L4A-R-L-M02,Vicuña Mackenna,1,L4A-R
+L4A,L,L4A-R-L-M03,Vicuña Mackenna,1,L4A-R
+L4A,L,L4A-R-L-M04,Vicuña Mackenna,1,L4A-R
+L4A,L,L4A-R-L-M05,Vicuña Mackenna,1,L4A-R
+L4A,L,L4A-R-L-M06,Vicuña Mackenna,1,L4A-R
+L4A,S,L4A-R-S-M07,Vicuña Mackenna,1,L4A-R
+L5,D,L5-I-D-M08,Vicente Valdés,0,L5-I
+L5R,L,L5R-I-L-M01,Vicente Valdés,0,L5R-I
+L5V,L,L5V-I-L-M01,Vicente Valdés,0,L5V-I
+L5R,L,L5R-I-L-M02,Vicente Valdés,0,L5R-I
+L5V,L,L5V-I-L-M02,Vicente Valdés,0,L5V-I
+L5,L,L5-I-L-M03,Vicente Valdés,0,L5-I
+L5R,L,L5R-I-L-M04,Vicente Valdés,0,L5R-I
+L5V,L,L5V-I-L-M04,Vicente Valdés,0,L5V-I
+L5R,L,L5R-I-L-M05,Vicente Valdés,0,L5R-I
+L5V,L,L5V-I-L-M05,Vicente Valdés,0,L5V-I
+L5,L,L5-I-L-M06,Vicente Valdés,0,L5-I
+L5,S,L5-I-S-M07,Vicente Valdés,0,L5-I
+L5,D,L5-R-D-M08,Plaza Maipú,1,L5-R
+L5R,L,L5R-R-L-M01,Plaza Maipú,1,L5R-R
+L5V,L,L5V-R-L-M01,Plaza Maipú,1,L5V-R
+L5R,L,L5R-R-L-M02,Plaza Maipú,1,L5R-R
+L5V,L,L5V-R-L-M02,Plaza Maipú,1,L5V-R
+L5,L,L5-R-L-M03,Plaza Maipú,1,L5-R
+L5R,L,L5R-R-L-M04,Plaza Maipú,1,L5R-R
+L5V,L,L5V-R-L-M04,Plaza Maipú,1,L5V-R
+L5R,L,L5R-R-L-M05,Plaza Maipú,1,L5R-R
+L5V,L,L5V-R-L-M05,Plaza Maipú,1,L5V-R
+L5,L,L5-R-L-M06,Plaza Maipú,1,L5-R
+L5,S,L5-R-S-M07,Plaza Maipú,1,L5-R
+L6,D,L6-I-D-M08,Los Leones,0,L6-I
+L6,L,L6-I-L-M01,Los Leones,0,L6-I
+L6,L,L6-I-L-M02,Los Leones,0,L6-I
+L6,L,L6-I-L-M03,Los Leones,0,L6-I
+L6,L,L6-I-L-M04,Los Leones,0,L6-I
+L6,L,L6-I-L-M05,Los Leones,0,L6-I
+L6,L,L6-I-L-M06,Los Leones,0,L6-I
+L6,S,L6-I-S-M07,Los Leones,0,L6-I
+L6,D,L6-R-D-M08,Cerrillos,1,L6-R
+L6,L,L6-R-L-M01,Cerrillos,1,L6-R
+L6,L,L6-R-L-M02,Cerrillos,1,L6-R
+L6,L,L6-R-L-M03,Cerrillos,1,L6-R
+L6,L,L6-R-L-M04,Cerrillos,1,L6-R
+L6,L,L6-R-L-M05,Cerrillos,1,L6-R
+L6,L,L6-R-L-M06,Cerrillos,1,L6-R
+L6,S,L6-R-S-M07,Cerrillos,1,L6-R

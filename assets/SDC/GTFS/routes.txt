@@ -1,0 +1,14 @@
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color
+L1,M,L1,Línea 1 (San Pablo - Los Dominicos),"",1,https://www.metro.cl/el-viaje/plano-de-red,FA0727,FFFFFF
+L2,M,L2-L2,Línea 2 (Vespucio Norte - Hospital El Pino),"",1,https://www.metro.cl/el-viaje/plano-de-red,FFD400,000000
+L2V,M,L2-L2V,Línea 2 Ruta Verde (Expreso Vespucio Norte - Hospital El Pino),"",1,https://www.metro.cl/el-viaje/ruta-expresa,FFD400,000000
+L2R,M,L2-L2R,Línea 2 Ruta Roja (Expreso Vespucio Norte - Hospital El Pino),"",1,https://www.metro.cl/el-viaje/ruta-expresa,FFD400,000000
+L3,M,L3,Línea 3 (Plaza Quilicura - Fernando Castillo Velasco),"",1,https://www.metro.cl/el-viaje/plano-de-red,83441D,FFFFFF
+L4,M,L4-L4,Línea 4 (Tobalaba - Plaza de Puente Alto),"",1,https://www.metro.cl/el-viaje/plano-de-red,1A1D6A,FFFFFF
+L4V,M,L4-L4V,Línea 4 Ruta Verde (Expreso Tobalaba - Plaza de Puente Alto),"",1,https://www.metro.cl/el-viaje/ruta-expresa,1A1D6A,FFFFFF
+L4R,M,L4-L4R,Línea 4 Ruta Roja (Expreso Tobalaba - Plaza de Puente Alto),"",1,https://www.metro.cl/el-viaje/ruta-expresa,1A1D6A,FFFFFF
+L4A,M,L4A,Línea 4A (La Cisterna - Vicuña Mackenna),"",1,https://www.metro.cl/el-viaje/plano-de-red,0A5FCA,FFFFFF
+L5,M,L5-L5,Línea 5 (Plaza de Maipú - Vicente Valdés),"",1,https://www.metro.cl/el-viaje/plano-de-red,008A63,FFFFFF
+L5V,M,L5-L5V,Línea 5 Ruta Verde (Expreso Plaza de Maipú - Vicente Valdés),"",1,https://www.metro.cl/el-viaje/ruta-expresa,008A63,FFFFFF
+L5R,M,L5-L5R,Línea 5 Ruta Roja (Expreso Plaza de Maipú - Vicente Valdés),"",1,https://www.metro.cl/el-viaje/ruta-expresa,008A63,FFFFFF
+L6,M,L6,Línea 6 (Cerrillos - Los Leones),"",1,https://www.metro.cl/el-viaje/plano-de-red,9933FF,FFFFFF
