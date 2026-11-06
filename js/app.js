@@ -119,7 +119,18 @@ async function rebuild() {
       maxLines: parseInt($('maxlines').value, 10) || 60,
     }, setStatus);
     const cm = App.city.colorMap || {};
-    feed.lines.forEach((L, i) => { L.displayColor = cm[L.name] || L.color || PALETTE[i % PALETTE.length]; });
+    // colours: city config first (official colours, kept as they are), else the feed's, else a palette.
+    // Feed colours that are (nearly) the same as an earlier line's get a different shade,
+    // so lines like Buenos Aires' two Premetro branches (both #FFBD33) can be told apart.
+    const used = [];
+    feed.lines.forEach((L, i) => {
+      if (cm[L.name]) { L.displayColor = cm[L.name]; used.push(L.displayColor); return; }
+      const base = L.color || PALETTE[i % PALETTE.length];
+      let c = base;
+      for (let k = 1; k <= 4 && used.some(u => colorDistance(u, c) < 40); k++) c = shadeColor(base, k % 2 ? -0.28 * Math.ceil(k / 2) : 0.28 * (k / 2));
+      L.displayColor = c;
+      used.push(c);
+    });
     const P = App.pending;
     App.pending = null;
 
@@ -341,6 +352,7 @@ function showStats() {
   $('stats').textContent = `${s.lines} lines · ${s.trips.toLocaleString()} trains · ${s.notes.toLocaleString()} station arrivals` +
     (s.droppedLines ? ` · ${s.droppedLines} quieter lines hidden` : '') +
     (skippedStops ? ` · ${skippedStops.toLocaleString()} stops without usable data skipped` : '') +
+    (sk.badShapes ? ` · ${sk.badShapes.toLocaleString()} trips pointed to a track shape that doesn’t match their stations (ignored)` : '') +
     (s.usedAllServices ? ' · (calendar didn’t match, using all services)' : '');
 }
 // label that fits the colour button: "L2-L2R" -> "L2R"; short names like "PM-C" stay as they are
@@ -348,6 +360,19 @@ function short(n) {
   if (n.length <= 5) return n;
   const tail = n.split(/[-\s]/).filter(Boolean).pop();
   return tail && tail.length <= 5 ? tail : n.slice(0, 5);
+}
+function hexRgb(hex) {
+  const h = hex.replace('#', '');
+  return [0, 2, 4].map(k => parseInt(h.slice(k, k + 2), 16) || 0);
+}
+function colorDistance(a, b) {
+  const x = hexRgb(a), y = hexRgb(b);
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+}
+// amount < 0 darkens towards black, > 0 lightens towards white
+function shadeColor(hex, amount) {
+  const t = amount < 0 ? 0 : 255, a = Math.min(1, Math.abs(amount));
+  return '#' + hexRgb(hex).map(v => Math.round(v + (t - v) * a).toString(16).padStart(2, '0')).join('');
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function contrast(hex) {

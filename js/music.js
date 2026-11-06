@@ -23,7 +23,7 @@ const Music = (() => {
     minutesPerBeat: 2,     // simulated minutes per beat
     scale: 'Major pentatonic',
     range: 7,              // scale steps from first to last station (1 = one note per line)
-    perLine: 1,            // max notes per line per 16th
+    perLine: 2,            // max notes per line per 16th
     volume: -6,
   };
 
@@ -142,16 +142,17 @@ const Music = (() => {
       total++;
       const v = ensureVoice(li);
       const vel = ev.term[i] ? 0.9 : 0.55 + Math.random() * 0.2;
-      const off = ((ev.t[i] - from) / simPerStep()) * stepSeconds() * 0.25; // a little human swing inside the step
+      // the note sounds at the exact moment the train reaches the station (not snapped to the grid)
+      const off = ((ev.t[i] - from) / simPerStep()) * stepSeconds();
       v.inst.trigger(Tone.Frequency(midi + v.inst.shift, 'midi').toNote(), v.inst.dur, time + off, vel);
-      hits.push([ev.station[i], li]);
+      hits.push([ev.station[i], li, off]);
     }
     simCursor = to;
     const [lo, hi] = loop || [feed.dayStart, feed.dayEnd];
     if (simCursor >= hi || simCursor < lo) { simCursor = lo; evPtr = lowerBound(simCursor); }
     // the visual clock and the flashes are stamped with the wall-clock time this step sounds
     const real = performance.now() + Math.max(0, time - Tone.context.currentTime) * 1000;
-    for (const [st, li] of hits) pushFlash(st, li, real);
+    for (const [st, li, off] of hits) pushFlash(st, li, real + off * 1000);
     Tone.Draw.schedule(() => { anchor = { sim: from, real: performance.now(), playing: true }; }, time);
   }
 
@@ -228,8 +229,12 @@ const Music = (() => {
     emit();
   }
   // where every sampler train is now, for the map: [{line, a, u}] (between stop a and a+1, fraction u)
+  // The map reads the same clock the notes are scheduled on, minus the device's output delay,
+  // so a train is drawn at a station exactly when you hear that station's note.
   function sampleTrains() {
-    const T = sampleT();
+    const raw = Tone.context.rawContext;
+    const latency = (raw.outputLatency || 0) + (raw.baseLatency || 0);
+    const T = sampleT(ctxNow() - latency);
     const out = [];
     sample.lines.forEach((L, i) => {
       if (!(L.n > 0) || L.S < 2) return;
@@ -237,8 +242,10 @@ const Music = (() => {
         const x = sampleX(L, T) + k * L.S / L.n;
         const m = ((x % L.S) + L.S) % L.S;
         const a = Math.floor(m);
-        if (a >= L.S - 1) continue;           // on its way back to the start
-        out.push({ line: i, a, u: m - a, invert: L.invert, on: L.on });
+        // last beat of the loop: the train waits at the terminal, then reappears at the first
+        // station exactly when that station's note plays
+        if (a >= L.S - 1) out.push({ line: i, a: L.S - 2, u: 1, invert: L.invert, on: L.on });
+        else out.push({ line: i, a, u: m - a, invert: L.invert, on: L.on });
       }
     });
     return out;

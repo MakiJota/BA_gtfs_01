@@ -366,8 +366,7 @@ const GTFS = (() => {
 
     // --- geometry: shapes if present, else station sequences ---
     progress('Reading shapes…');
-    const wantShapes = new Map(); // shape_id -> line
-    for (const p of pats) if (p.shape && !wantShapes.has(p.shape)) wantShapes.set(p.shape, p.line);
+    const wantShapes = new Set(pats.filter(p => p.shape).map(p => p.shape));
     const shapePts = new Map();
     if (wantShapes.size) {
       let sc = {};
@@ -383,20 +382,51 @@ const GTFS = (() => {
         });
     }
     const polylines = lines.map(() => []);
-    const shapeList = [];            // [{line, pts:[[lat,lon]…]}] — trains travel along these
+    const shapeList = [];            // [{lines:[…], pts:[[lat,lon]…]}] — trains travel along these
     const shapeIndex = new Map();    // shape_id -> index in shapeList
-    const lineHasShape = new Set();
     for (const [id, pts] of shapePts) {
       pts.sort((a, b) => a[0] - b[0]);
-      const li = wantShapes.get(id);
       const clean = pts.filter(q => !isNaN(q[1]) && !isNaN(q[2])).map(q => [q[1], q[2]]);
       if (clean.length < 2) continue;
       shapeIndex.set(id, shapeList.length);
-      shapeList.push({ line: li, pts: clean });
-      polylines[li].push(clean);
-      lineHasShape.add(li);
+      shapeList.push({ lines: [], pts: clean });
     }
-    for (const p of pats) p.shapeIdx = p.shape && shapeIndex.has(p.shape) ? shapeIndex.get(p.shape) : -1;
+    // A trip's shape_id is only trusted if the shape actually passes by the trip's stations.
+    // (Buenos Aires: weekday Line A trip A01 points to Line E's shape "E0".) A shape that
+    // doesn't fit is ignored for that trip — the trip then runs on a shape that fits its line.
+    const SHAPE_FIT_M = 250;
+    const fitCache = new Map();
+    const shapeFits = (si, p) => {
+      const key = si + '|' + p.stations.join(',');
+      if (fitCache.has(key)) return fitCache.get(key);
+      const pts = shapeList[si].pts;
+      const step = Math.max(1, Math.floor(pts.length / 600));
+      let sum = 0;
+      for (const s of p.stations) {
+        const la = stLat[s], lo = stLon[s], c = Math.cos(la * Math.PI / 180);
+        let best = Infinity;
+        for (let k = 0; k < pts.length; k += step) {
+          const d = (pts[k][0] - la) ** 2 + ((pts[k][1] - lo) * c) ** 2;
+          if (d < best) best = d;
+        }
+        sum += Math.sqrt(best) * 111320;
+      }
+      const ok = sum / p.stations.length < SHAPE_FIT_M;
+      fitCache.set(key, ok);
+      return ok;
+    };
+    for (const p of pats) {
+      const si = p.shape ? shapeIndex.get(p.shape) : undefined;
+      if (si !== undefined && shapeFits(si, p)) {
+        p.shapeIdx = si;
+        if (!shapeList[si].lines.includes(p.line)) shapeList[si].lines.push(p.line);
+      } else {
+        p.shapeIdx = -1;
+        if (si !== undefined) skipped.badShapes = (skipped.badShapes || 0) + p.starts.length;
+      }
+    }
+    const lineHasShape = new Set();
+    for (const s of shapeList) for (const li of s.lines) { polylines[li].push(s.pts); lineHasShape.add(li); }
     const seenSeq = new Set();
     for (const p of pats) {
       if (lineHasShape.has(p.line)) continue;

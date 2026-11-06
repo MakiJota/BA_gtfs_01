@@ -53,10 +53,23 @@ function buildWorld(feed, boundary) {
       x[i] = q[0]; y[i] = q[1];
       if (i) cum[i] = cum[i - 1] + Math.hypot(x[i] - x[i - 1], y[i] - y[i - 1]);
     }
-    return { line: s.line, x, y, cum };
+    return { lines: s.lines || [], x, y, cum };
+  });
+  // lines that run over the same stations as an earlier line are drawn thinner on top of it,
+  // so both colours stay visible (e.g. the two Premetro branches share 12 stations)
+  const stationSets = feed.lines.map(() => new Set());
+  for (const p of feed.patterns) for (const s of p.stations) stationSets[p.line].add(s);
+  const stack = feed.lines.map((L, i) => {
+    let k = 0;
+    for (let j = 0; j < i; j++) {
+      let shared = 0;
+      for (const s of stationSets[i]) if (stationSets[j].has(s)) shared++;
+      if (shared >= 3) k++;
+    }
+    return k;
   });
   const tl = P(b.latMax, b.lonMin), br = P(b.latMin, b.lonMax);
-  return { sx, sy, lines, rings, shapes, geom: new WeakMap(), geomByKey: new Map(), minX: tl[0], minY: tl[1], maxX: br[0], maxY: br[1] };
+  return { sx, sy, lines, rings, shapes, stack, geom: new WeakMap(), geomByKey: new Map(), minX: tl[0], minY: tl[1], maxX: br[0], maxY: br[1] };
 }
 
 // ---------- trains on the tracks ----------
@@ -96,7 +109,7 @@ function patternGeom(p) {
   g = world.geomByKey.get(key);
   if (g === undefined) {
     const cands = p.shapeIdx >= 0 ? [p.shapeIdx] : [];
-    if (!cands.length) world.shapes.forEach((s, i) => { if (s.line === p.line) cands.push(i); });
+    if (!cands.length) world.shapes.forEach((s, i) => { if (s.lines.includes(p.line)) cands.push(i); });
     let best = null;
     for (const si of cands) {
       for (const S of [world.shapes[si], reversedShape(world.shapes[si])]) {
@@ -176,7 +189,8 @@ function renderLayer() {
     const c = color(L.displayColor);
     c.setAlpha(off ? 110 : 235);
     g.stroke(c);
-    g.strokeWeight((off ? 2.5 : 3.5) * px);
+    const shrink = Math.pow(0.55, world.stack[i] || 0);   // shared track: a thinner stripe on top
+    g.strokeWeight((off ? 3 : 4.5) * shrink * px);
     for (const pl of world.lines[i]) {
       g.beginShape();
       for (const p of pl) g.vertex(p[0], p[1]);
