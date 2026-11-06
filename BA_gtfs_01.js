@@ -1,480 +1,247 @@
+// p5.js map: lines, stations and timetable-driven trains, synced to the music clock.
+// Data comes from js/gtfs.js (App.feed); the clock comes from js/music.js (Music.simNow()).
+// The previous random-dot version of this sketch is in git history.
 
-// Global data variables
-let city_limit, stops, routes, shapes, trips, stopTimes;
-let lonMin, lonMax, latMin, latMax;
-let subteColors; 
-let titleText;
+let view = { s: 1, ox: 0, oy: 0 };   // screen = s * world + o
+let world = null;                    // projected geometry of the current feed
+let layer = null, layerView = null, layerDirty = true, lastInteract = 0;
+let dragging = false, lastX = 0, lastY = 0;
+let lastFeed = null;
 
-// UI elements (for future implementation)
-let buttonBA, buttonNYC, buttonCDMX, buttonBE;
-
-// Cached data for performance
-let routeToLineCache = {};
-let tripToRouteCache = {};
-let stopToRouteCache = {};
-
-// ================== CONFIG ==================
-const SUPPORTED_CITIES = ["NYC", "BA", "CDMX", "BE", "SDC"];
-let city = "BA"; // Current active city
-
-// Active config
-let cfg = null;
-// zoom/pan vars
-let zoom = 1;
-let offsetX = 0, offsetY = 0;
-let dragging = false;
-let lastX, lastY;
-
-// store comuna fill colors (avoid flashing)
-let comunaColors = [];
-
-
-
-// ========== VAGONS ==========
-let shapePaths = {};  // shape_id → array of {x, y, seq}
-let vagons = [];      // each vagon: {shape_id, pos, speed, color}
-
-// ========== UTILITY FUNCTIONS ==========
-function getLineLetterFromShape(shape_id, cityType) {
-  if (cityType === "BA" || cityType === "NYC" || cityType === "BE") {
-    return shape_id.charAt(0);
-  } else if (cityType === "CDMX" || cityType === "SDC") {
-    return shape_id;
-  }
-  return shape_id.charAt(0); // fallback
-}
-
-function mapCoordinates(lon, lat) {
-  return {
-    x: map(lon, lonMin, lonMax, 50, width - 50),
-    y: map(lat, latMin, latMax, height - 50, 50)
-  };
-}
-
-function validateConfig(config) {
-  const required = ['folder', 'lonMin', 'lonMax', 'latMin', 'latMax', 'title', 'colors'];
-  for (let field of required) {
-    if (!(field in config)) {
-      throw new Error(`Missing required config field: ${field}`);
-    }
-  }
-  return true;
-}
-
-function preload() {
-  console.log(`Loading assets/${city}/config.json`);
-
-  try {
-    cfg = loadJSON(`assets/${city}/config.json`, (data) => {
-      console.log("Config loaded:", data);
-      
-      try {
-        validateConfig(data);
-        cfg = data;
-
-        // Load dependent files
-        city_limit = loadJSON(cfg.folder + 'limit.geojson');
-        stops      = loadTable(cfg.folder + 'GTFS/stops.txt', 'csv', 'header');
-        routes     = loadTable(cfg.folder + 'GTFS/routes.txt', 'csv', 'header');
-        shapes     = loadTable(cfg.folder + 'GTFS/shapes.txt', 'csv', 'header');
-        trips      = loadTable(cfg.folder + 'GTFS/trips.txt', 'csv', 'header');
-        stopTimes  = loadTable(cfg.folder + 'GTFS/stop_times.txt', 'csv', 'header');
-      } catch (error) {
-        console.error("Config validation failed:", error);
-      }
-    }, (error) => {
-      console.error("Failed to load config:", error);
-    });
-  } catch (error) {
-    console.error("Error in preload:", error);
-  }
-}
-
+function mapContainer() { return document.getElementById('map'); }
 
 function setup() {
-  createCanvas(1200, 1200);
-  console.log("Setup complete for " + city);
-
-  // Wait for config to load
-  if (!cfg) {
-    console.warn("Config not loaded yet, retrying in next frame");
-    return;
-  }
-
-  // Initialize config values
-  lonMin = cfg.lonMin;
-  lonMax = cfg.lonMax;
-  latMin = cfg.latMin;
-  latMax = cfg.latMax;
-  subteColors = cfg.colors;
-  titleText = cfg.title;
-
-  // Initialize comuna colors
-  initializeComunaColors();
-  
-  // Build lookup tables for performance
-  buildDataCaches();
-  
-  // Prepare visualization data
-  prepareShapePaths();
-  setupVagons();
+  const box = mapContainer();
+  const c = createCanvas(box.clientWidth, box.clientHeight);
+  c.parent(box);
+  pixelDensity(Math.min(2, window.devicePixelRatio || 1));
+  textFont('system-ui');
 }
 
-function initializeComunaColors() {
-  if (city_limit && city_limit.features) {
-    comunaColors = [];
-    for (let i = 0; i < city_limit.features.length; i++) {
-      comunaColors[i] = color(random(180, 230), 200);
+function windowResized() {
+  const box = mapContainer();
+  resizeCanvas(box.clientWidth, box.clientHeight);
+  if (world) fitView();
+  layerDirty = true;
+}
+
+// ---------- projection ----------
+function buildWorld(feed, boundary) {
+  const b = feed.bbox;
+  const lat0 = (b.latMin + b.latMax) / 2, lon0 = (b.lonMin + b.lonMax) / 2;
+  const kx = Math.cos(lat0 * Math.PI / 180) * 1000, ky = 1000;
+  const P = (lat, lon) => [(lon - lon0) * kx, -(lat - lat0) * ky];
+  const st = feed.stations;
+  const sx = new Float32Array(st.lat.length), sy = new Float32Array(st.lat.length);
+  for (let i = 0; i < sx.length; i++) { const p = P(st.lat[i], st.lon[i]); sx[i] = p[0]; sy[i] = p[1]; }
+  const lines = feed.polylines.map(pls => pls.map(pl => pl.map(([la, lo]) => P(la, lo))));
+  const rings = [];
+  if (boundary && boundary.features) {
+    for (const f of boundary.features) {
+      const g = f.geometry;
+      if (!g) continue;
+      const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+      for (const poly of polys) for (const ring of poly) rings.push(ring.map(([lo, la]) => P(la, lo)));
     }
   }
+  const tl = P(b.latMax, b.lonMin), br = P(b.latMin, b.lonMax);
+  return { sx, sy, lines, rings, minX: tl[0], minY: tl[1], maxX: br[0], maxY: br[1] };
 }
 
-function buildDataCaches() {
-  if (!routes || !trips || !stopTimes) return;
-  
-  // Cache route_id → route_short_name mapping
-  routeToLineCache = {};
-  for (let r = 0; r < routes.getRowCount(); r++) {
-    let route_id = routes.getString(r, 'route_id');
-    let route_short_name = routes.getString(r, 'route_short_name'); 
-    routeToLineCache[route_id] = route_short_name;
-  }
+function fitView() {
+  const pad = 40;
+  const w = world.maxX - world.minX || 1, h = world.maxY - world.minY || 1;
+  const s = Math.min((width - 2 * pad) / w, (height - 2 * pad - 40) / h);
+  view = { s, ox: width / 2 - s * (world.minX + w / 2), oy: height / 2 + 20 - s * (world.minY + h / 2) };
+  layerDirty = true;
+}
 
-  // Cache trip_id → route_id mapping
-  tripToRouteCache = {};
-  for (let r = 0; r < trips.getRowCount(); r++) {
-    tripToRouteCache[trips.getString(r, 'trip_id')] = trips.getString(r, 'route_id');
+// ---------- static layer (boundary, lines, stations) ----------
+function renderLayer() {
+  if (!layer || layer.width !== width || layer.height !== height) {
+    if (layer) layer.remove();
+    layer = createGraphics(width, height);
+    layer.pixelDensity(pixelDensity());
   }
-
-  // Cache stop_id → route_id mapping
-  stopToRouteCache = {};
-  for (let r = 0; r < stopTimes.getRowCount(); r++) {
-    let stop_id = stopTimes.getString(r, 'stop_id');
-    let trip_id = stopTimes.getString(r, 'trip_id');
-    let route_id = tripToRouteCache[trip_id];
-    if (route_id && !stopToRouteCache[stop_id]) {
-      stopToRouteCache[stop_id] = route_id;
+  const g = layer;
+  g.clear();
+  g.push();
+  g.translate(view.ox, view.oy);
+  g.scale(view.s);
+  const px = 1 / view.s;
+  const dark = isDark();
+  // boundary
+  g.noStroke();
+  g.fill(dark ? 40 : 228);
+  for (const ring of world.rings) {
+    g.beginShape();
+    for (const p of ring) g.vertex(p[0], p[1]);
+    g.endShape(CLOSE);
+  }
+  // lines
+  const cfgs = Music.lineCfg();
+  const anySolo = cfgs.some(c => c.solo);
+  g.noFill();
+  g.strokeJoin(ROUND);
+  App.feed.lines.forEach((L, i) => {
+    const off = cfgs[i] && (cfgs[i].mute || (anySolo && !cfgs[i].solo));
+    const c = color(L.displayColor);
+    c.setAlpha(off ? 50 : 230);
+    g.stroke(c);
+    g.strokeWeight(3 * px);
+    for (const pl of world.lines[i]) {
+      g.beginShape();
+      for (const p of pl) g.vertex(p[0], p[1]);
+      g.endShape();
     }
-  }
-  
-  console.log("Data caches built successfully");
+  });
+  // stations
+  g.stroke(dark ? 230 : 40);
+  g.strokeWeight(0.8 * px);
+  g.fill(dark ? 30 : 255);
+  for (let i = 0; i < world.sx.length; i++) g.circle(world.sx[i], world.sy[i], 4.5 * px);
+  g.pop();
+  layerView = { ...view };
+  layerDirty = false;
 }
 
-// ========== DRAW LOOP ==========
+function isDark() { return document.documentElement.dataset.theme === 'dark'; }
+
+// ---------- draw ----------
 function draw() {
-  background(240);
+  const dark = isDark();
+  background(dark ? 22 : 244);
+  const feed = App.feed;
+  if (!feed) { drawMessage(App.status || 'Choose a city or drop a GTFS file'); return; }
+  if (feed !== lastFeed) {
+    lastFeed = feed;
+    world = buildWorld(feed, App.boundary);
+    fitView();
+  }
+  if (App.redrawLines) { App.redrawLines = false; layerDirty = true; }
+  const idle = millis() - lastInteract > 180;
+  if (!layer || layer.width !== width || layer.height !== height || (layerDirty && idle)) renderLayer();
 
-  // Draw title
-  noStroke();
-  fill(0);
-  textSize(24);
-  textAlign(LEFT, TOP);
-  text(titleText, 10, 10);
+  // static layer, re-mapped from the view it was rendered at
+  const f = view.s / layerView.s;
+  push();
+  translate(view.ox - f * layerView.ox, view.oy - f * layerView.oy);
+  scale(f);
+  image(layer, 0, 0, layer.width, layer.height);
+  pop();
 
-  // Apply zoom/pan
-  translate(width/2 + offsetX, height/2 + offsetY);
-  scale(zoom);
-  translate(-width/2, -height/2);
-
-  drawComunas();
-  drawSubteRoutes();
-  drawStops();
-  drawVagons();
+  const t = Music.simNow();
+  push();
+  translate(view.ox, view.oy);
+  scale(view.s);
+  const px = 1 / view.s;
+  drawFlashes(px);
+  drawTrains(t, px, dark);
+  pop();
+  drawClock(t, dark);
+  if (App.status) drawMessage(App.status);
 }
 
-
-// ========== DRAWING FUNCTIONS ==========
-function drawComunas() {
-  if (!city_limit) return;
-
-  noStroke();
-  for (let f = 0; f < city_limit.features.length; f++) {
-    let feature = city_limit.features[f];
-    let geom = feature.geometry;
-    fill(comunaColors[f]);
-
-    if (!geom) continue;
-
-    if (geom.type === "Polygon") {
-      drawPolygon(geom.coordinates);
-    } else if (geom.type === "MultiPolygon") {
-      for (let p = 0; p < geom.coordinates.length; p++) {
-        drawPolygon(geom.coordinates[p]);
-      }
-    }
+function drawTrains(t, px, dark) {
+  const feed = App.feed;
+  const inst = feed.instances;
+  const cfgs = Music.lineCfg();
+  const anySolo = cfgs.some(c => c.solo);
+  // first instance that could still be running: start >= t - maxDur
+  let lo = 0, hi = inst.length;
+  const from = t - feed.maxDur;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (inst[m].s < from) lo = m + 1; else hi = m; }
+  stroke(dark ? 0 : 255);
+  strokeWeight(1 * px);
+  for (let k = lo; k < inst.length && inst[k].s <= t; k++) {
+    const it = inst[k];
+    if (it.e < t) continue;
+    const p = it.p;
+    const dt = t - it.s;
+    const offs = p.offsets;
+    let a = 0, b = offs.length - 1;
+    while (b - a > 1) { const m = (a + b) >> 1; if (offs[m] <= dt) a = m; else b = m; }
+    const span = offs[b] - offs[a];
+    const u = span > 0 ? Math.min(1, Math.max(0, (dt - offs[a]) / span)) : 0;
+    const sa = p.stations[a], sb = p.stations[b];
+    const x = world.sx[sa] + (world.sx[sb] - world.sx[sa]) * u;
+    const y = world.sy[sa] + (world.sy[sb] - world.sy[sa]) * u;
+    const off = cfgs[p.line] && (cfgs[p.line].mute || (anySolo && !cfgs[p.line].solo));
+    if (off) fill(dark ? 90 : 170); else fill(feed.lines[p.line].displayColor);
+    circle(x, y, 9 * px);
   }
 }
 
-function drawPolygon(coords) {
-  for (let r = 0; r < coords.length; r++) {
-    beginShape();
-    for (let i = 0; i < coords[r].length; i++) {
-      let lon = coords[r][i][0];
-      let lat = coords[r][i][1];
-      let mapped = mapCoordinates(lon, lat);
-      vertex(mapped.x, mapped.y);
-    }
-    endShape(CLOSE);
-  }
-}
-
-// Cache for processed shapes (avoid reprocessing every frame)
-let processedShapes = null;
-
-function drawSubteRoutes() {
-  if (!shapes) return;
-
-  // Process shapes only once
-  if (!processedShapes) {
-    processedShapes = processShapesData();
-  }
-
-  strokeWeight(3);
+function drawFlashes(px) {
+  const now = performance.now();
   noFill();
-
-  // Draw each processed shape
-  for (let shape_id in processedShapes) {
-    let pts = processedShapes[shape_id];
-    let lineLetter = getLineLetterFromShape(shape_id, city);
-    
-    stroke(subteColors[lineLetter] || 'black');
-
-    beginShape();
-    for (let pt of pts) {
-      vertex(pt.x, pt.y);
-    }
-    endShape();
+  for (const fl of Music.flashes) {
+    const age = (now - fl.real) / 700;
+    if (age > 1 || age < 0) continue;
+    const c = color(App.feed.lines[fl.line].displayColor);
+    c.setAlpha(255 * (1 - age));
+    stroke(c);
+    strokeWeight(2 * px);
+    circle(world.sx[fl.station], world.sy[fl.station], (8 + 26 * age) * px);
   }
 }
 
-function processShapesData() {
-  let shapesById = {};
-  
-  for (let r = 0; r < shapes.getRowCount(); r++) {
-    let shape_id = shapes.getString(r, 'shape_id');
-    let lat = float(shapes.getString(r, 'shape_pt_lat'));
-    let lon = float(shapes.getString(r, 'shape_pt_lon'));
-    let seq = int(shapes.getString(r, 'shape_pt_sequence'));
-
-    if (!shapesById[shape_id]) shapesById[shape_id] = [];
-    
-    let mapped = mapCoordinates(lon, lat);
-    shapesById[shape_id].push({
-      x: mapped.x, 
-      y: mapped.y, 
-      seq: seq
-    });
-  }
-
-  // Sort all shapes by sequence
-  for (let shape_id in shapesById) {
-    shapesById[shape_id].sort((a, b) => a.seq - b.seq);
-  }
-  
-  return shapesById;
-}
-function drawStops() {
-  if (!stops) return;
-
-  let seen = new Set();
-  stroke(0);
-  strokeWeight(0.5);
-  rectMode(CENTER);
-
-  for (let r = 0; r < stops.getRowCount(); r++) {
-    let stop_id = stops.getString(r, 'stop_id');
-    let stop_name = stops.getString(r, 'stop_name');
-    let lat = float(stops.getString(r, 'stop_lat'));
-    let lon = float(stops.getString(r, 'stop_lon'));
-    
-    // Skip invalid coordinates or duplicate stop names
-    if (isNaN(lat) || isNaN(lon) || seen.has(stop_name)) continue;
-    seen.add(stop_name);
-
-    let lineLetter = getStopLineLetter(stop_id, r);
-    if (!lineLetter || !subteColors[lineLetter]) continue;
-
-    fill(subteColors[lineLetter]);
-    let mapped = mapCoordinates(lon, lat);
-    rect(mapped.x, mapped.y, 6, 6);
-  }
+function fmtClock(t) {
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60);
+  return `${String(h % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function getStopLineLetter(stop_id, stopRowIndex) {
-  if (city === "BA" || city === "NYC" || city === "BE") {
-    let route_id = stopToRouteCache[stop_id];
-    if (route_id) {
-      let route_short_name = routeToLineCache[route_id];
-      return route_short_name ? route_short_name.charAt(0) : null;
-    }
-  } else if (city === "CDMX" || city === "SDC") {
-    return stops.getString(stopRowIndex, 'line_id');
-  }
-  return null;
+function drawClock(t, dark) {
+  noStroke();
+  fill(dark ? 240 : 20);
+  textAlign(LEFT, TOP);
+  textSize(34);
+  textStyle(BOLD);
+  text(fmtClock(t), 18, 14);
+  textStyle(NORMAL);
+  textSize(13);
+  fill(dark ? 170 : 90);
+  text(App.title || '', 20, 54);
+  const el = document.getElementById('clock-readout');
+  if (el) el.textContent = fmtClock(t);
+  const sl = document.getElementById('scrub');
+  if (sl && !sl.matches(':active') && Music.isPlaying()) sl.value = Math.round(t / 60);
 }
 
-
-// ========== VAGONS ==========
-function prepareShapePaths() {
-  if (!shapes) return;
-  
-  shapePaths = {};
-  
-  for (let r = 0; r < shapes.getRowCount(); r++) {
-    let shape_id = shapes.getString(r, 'shape_id');
-    let lat = float(shapes.getString(r, 'shape_pt_lat'));
-    let lon = float(shapes.getString(r, 'shape_pt_lon'));
-    let seq = int(shapes.getString(r, 'shape_pt_sequence'));
-
-    if (!shapePaths[shape_id]) shapePaths[shape_id] = [];
-    
-    let mapped = mapCoordinates(lon, lat);
-    shapePaths[shape_id].push({
-      x: mapped.x, 
-      y: mapped.y, 
-      seq: seq
-    });
-  }
-
-  // Sort all paths by sequence
-  for (let sid in shapePaths) {
-    shapePaths[sid].sort((a, b) => a.seq - b.seq);
-  }
-  
-  console.log(`Prepared ${Object.keys(shapePaths).length} shape paths`);
+function drawMessage(msg) {
+  noStroke();
+  fill(isDark() ? 200 : 60);
+  textAlign(CENTER, CENTER);
+  textSize(16);
+  text(msg, width / 2, height / 2);
 }
 
-function setupVagons() {
-  vagons = []; // Clear existing vagons
-  
-  const TRAINS_PER_LINE = 2;
-  const BASE_SPEED = 0.001;
-  const SPEED_VARIATION = 0.002;
-  
-  for (let shape_id in shapePaths) {
-    let lineLetter = getLineLetterFromShape(shape_id, city);
-    let lineColor = subteColors[lineLetter];
-    
-    // Skip shapes without valid colors
-    if (!lineColor) {
-      console.warn(`No color found for line: ${lineLetter} (shape: ${shape_id})`);
-      lineColor = color(random(50, 255), random(50, 255), random(50, 255));
-    }
-    
-    for (let i = 0; i < TRAINS_PER_LINE; i++) {
-      vagons.push({
-        shape_id: shape_id,
-        pos: random(), // Random starting position
-        speed: BASE_SPEED + random(0, SPEED_VARIATION),
-        color: lineColor
-      });
-    }
-  }
-  
-  console.log(`Created ${vagons.length} vagons for ${Object.keys(shapePaths).length} shapes`);
+// ---------- interaction (only when the pointer is on the map) ----------
+function onMap(e) { return e && e.target && e.target.tagName === 'CANVAS'; }
+
+function mouseWheel(e) {
+  if (!onMap(e) || !world) return;
+  const k = e.delta > 0 ? 1 / 1.15 : 1.15;
+  view.ox = mouseX - (mouseX - view.ox) * k;
+  view.oy = mouseY - (mouseY - view.oy) * k;
+  view.s *= k;
+  layerDirty = true;
+  lastInteract = millis();
+  return false;
 }
-
-function drawVagons() {
-  strokeWeight(1);
-  for (let v of vagons) {
-    let path = shapePaths[v.shape_id];
-    if (!path || path.length < 5) continue;
-
-    let total = path.length - 1;
-    let idxF = v.pos * total;
-    let idx = floor(idxF);
-    let t = idxF - idx;
-
-    let p1 = path[idx];
-    let p2 = path[min(idx+1, total)];
-
-    let x = lerp(p1.x, p2.x, t);
-    let y = lerp(p1.y, p2.y, t);
-
-    fill(v.color);
-    stroke(0);
-    ellipse(x, y, 8, 8);
-
-    v.pos += v.speed;
-    if (v.pos > 1) v.pos = 0;
-  }
-}
-
-// ========== INTERACTIVITY ==========
-function mouseWheel(event) {
-  const ZOOM_FACTOR = 0.1;
-  const MIN_ZOOM = 0.1;
-  const MAX_ZOOM = 5.0;
-  
-  let zoomChange = event.delta > 0 ? -ZOOM_FACTOR : ZOOM_FACTOR;
-  zoom = constrain(zoom + zoomChange, MIN_ZOOM, MAX_ZOOM);
-  
-  return false; // Prevent page scrolling
-}
-
-function mousePressed() {
-  dragging = true;
-  lastX = mouseX;
-  lastY = mouseY;
-}
-
-function mouseReleased() {
-  dragging = false;
-}
-
+function mousePressed(e) { if (onMap(e)) { dragging = true; lastX = mouseX; lastY = mouseY; } }
+function mouseReleased() { dragging = false; }
 function mouseDragged() {
-  if (dragging) {
-    offsetX += (mouseX - lastX);
-    offsetY += (mouseY - lastY);
-    lastX = mouseX;
-    lastY = mouseY;
-  }
+  if (!dragging) return;
+  view.ox += mouseX - lastX;
+  view.oy += mouseY - lastY;
+  lastX = mouseX; lastY = mouseY;
+  layerDirty = true;
+  lastInteract = millis();
 }
-
-// ========== CITY SWITCHING ==========
-function switchCity(newCity) {
-  if (!SUPPORTED_CITIES.includes(newCity)) {
-    console.error(`Unsupported city: ${newCity}`);
-    return false;
-  }
-  
-  if (newCity === city) return true; // Already loaded
-  
-  console.log(`Switching from ${city} to ${newCity}`);
-  city = newCity;
-  
-  // Reset caches and processed data
-  resetDataCaches();
-  
-  // Reload data for new city
-  preload();
-  
-  return true;
-}
-
-function resetDataCaches() {
-  processedShapes = null;
-  routeToLineCache = {};
-  tripToRouteCache = {};
-  stopToRouteCache = {};
-  shapePaths = {};
-  vagons = [];
-  comunaColors = [];
-}
-
-// ========== KEYBOARD CONTROLS ==========
-function keyPressed() {
-  switch(key.toLowerCase()) {
-    case '1': switchCity('BA'); break;
-    case '2': switchCity('NYC'); break;
-    case '3': switchCity('CDMX'); break;
-    case '4': switchCity('BE'); break;
-    case '5': switchCity('SDC'); break;
-    case 'r': 
-      // Reset zoom and pan
-      zoom = 1;
-      offsetX = 0;
-      offsetY = 0;
-      break;
-  }
+function keyPressed(e) {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  if (key === ' ') { App.togglePlay(); return false; }
+  if (key === 'r' || key === 'R') { if (world) fitView(); }
 }

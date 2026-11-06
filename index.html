@@ -9,17 +9,218 @@
   <script language="javascript" type="text/javascript" src="BA_gtfs_01.js"></script>
   <!-- OK, YOU CAN MAKE CHANGES BELOW THIS LINE AGAIN -->
 
+  <title>Subte Musical · GTFS as music</title>
+  <meta name="description" content="Turn any public-transport timetable (GTFS) into music. Every train arriving at a station plays a note.">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="js/csv.js"></script>
+  <script src="js/gtfs.js"></script>
+  <script src="js/music.js"></script>
+  <script src="js/app.js"></script>
+
   <style>
+    :root {
+      --bg: #f4f2ee; --panel: #ffffff; --ink: #1d1d1f; --muted: #6b6f75; --rule: #e3dfd7;
+      --accent: #26B0A1; --accent-ink: #fff; --field: #f7f6f3; --navy: #001E51; --link: #4d90a8;
+    }
+    :root[data-theme="dark"] {
+      --bg: #161719; --panel: #1f2124; --ink: #ececec; --muted: #9da1a8; --rule: #33363b;
+      --field: #2a2d31; --navy: #cfe3ff; --link: #7fc3dc;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
-      padding: 0;
-      margin: 0;
-      background: #f0f0f0;
-      overflow: hidden;
+      margin: 0; display: flex; background: var(--bg); color: var(--ink);
+      font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden;
+    }
+    #panel {
+      width: 340px; flex-shrink: 0; height: 100%; overflow-y: auto; background: var(--panel);
+      border-right: 1px solid var(--rule); padding: 14px 16px 90px;
+    }
+    #map { flex: 1; min-width: 0; height: 100%; position: relative; overflow: hidden; }
+    #map canvas { display: block; touch-action: none; }
+
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand h1 { font-size: 19px; margin: 0; line-height: 1.15; }
+    .brand p { margin: 0; color: var(--muted); font-size: 12.5px; }
+    .dots { display: flex; gap: 3px; }
+    .dots span { width: 12px; height: 12px; border-radius: 50%; }
+    .top-links { display: flex; gap: 6px; margin: 10px 0 4px; }
+    .pill {
+      font: inherit; font-size: 12.5px; cursor: pointer; text-decoration: none; color: var(--ink);
+      background: var(--field); border: 1px solid var(--rule); border-radius: 999px; padding: 3px 11px;
+    }
+    .pill:hover { border-color: var(--accent); }
+
+    h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+    label.row { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 8px; margin: 6px 0; }
+    label.row output { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; min-width: 64px; text-align: right; }
+    select, input[type=number] {
+      font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--rule);
+      border-radius: 6px; padding: 4px 6px; min-width: 0;
+    }
+    select:focus, input:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    input[type=range] { width: 100%; accent-color: var(--accent); }
+    #city { width: 100%; padding: 7px 8px; }
+    #drop {
+      margin-top: 8px; border: 1.5px dashed var(--rule); border-radius: 10px; padding: 12px; text-align: center;
+      color: var(--muted); cursor: pointer; font-size: 13px;
+    }
+    #drop:hover, body.dragging #drop { border-color: var(--accent); color: var(--ink); }
+    #drop b { color: var(--ink); }
+    #status { color: var(--accent); min-height: 1.2em; font-size: 13px; margin-top: 6px; }
+    #stats, #daylen { color: var(--muted); font-size: 12.5px; }
+    .chk { display: inline-flex; align-items: center; gap: 4px; margin: 2px 10px 2px 0; }
+    .chk small { color: var(--muted); }
+
+    .transport { display: flex; align-items: center; gap: 10px; }
+    #play {
+      font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 8px; padding: 9px 18px;
+      background: var(--accent); color: var(--accent-ink);
+    }
+    #play.on { background: var(--ink); color: var(--panel); }
+    #clock-readout { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    .lines-head { display: flex; align-items: center; justify-content: space-between; }
+    .lines-head .pill { padding: 2px 8px; font-size: 12px; }
+    .line-row { display: grid; grid-template-columns: 46px 1fr 44px 1.4fr 26px 26px; gap: 4px; align-items: center; margin: 4px 0; }
+    .line-row select { padding: 3px 2px; font-size: 13px; }
+    .swatch {
+      border: 0; border-radius: 6px; height: 28px; font-weight: 700; font-size: 12px; cursor: pointer;
+      overflow: hidden; white-space: nowrap; padding: 0 3px;
+    }
+    .tog {
+      height: 26px; border: 1px solid var(--rule); border-radius: 5px; background: var(--field); color: var(--muted);
+      font-weight: 700; font-size: 11px; cursor: pointer; padding: 0;
+    }
+    .tog.mute.on { background: #d9534f; border-color: #d9534f; color: #fff; }
+    .tog.solo.on { background: #f0ad4e; border-color: #f0ad4e; color: #000; }
+    .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+    details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+
+    body.dragging #map::after {
+      content: "Drop your GTFS .zip to play it"; position: absolute; inset: 12px; border: 3px dashed var(--accent);
+      border-radius: 14px; display: grid; place-items: center; font-size: 20px; font-weight: 600;
+      background: color-mix(in srgb, var(--bg) 80%, transparent); pointer-events: none;
+    }
+
+    /* About me modal (same look as Bird_gbg) */
+    #about-modal {
+      display: none; position: fixed; inset: 0; z-index: 20;
+      background: rgba(0, 0, 0, 0.45); padding: 16px; overflow-y: auto;
+    }
+    #about-modal.open { display: flex; align-items: flex-start; justify-content: center; }
+    .about-box {
+      background: #fff; color: #222; max-width: 720px; width: 100%; margin-top: 40px;
+      border-radius: 8px; padding: 20px 24px; font: 15px/1.55 system-ui, sans-serif;
+    }
+    .about-box h3 { margin: 0 0 16px; color: #001E51; }
+    .about-head { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 12px; }
+    .about-head img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid #4d90a8; flex-shrink: 0; }
+    .about-head h4 { margin: 0 0 6px; color: #001E51; }
+    .about-box a { color: #4d90a8; text-decoration: none; }
+    .about-box hr { border: 0; border-top: 1px solid #4d90a8; margin: 16px 0; }
+    .about-box h5 { margin: 0 0 6px; color: #001E51; font-size: 15px; }
+    .about-links { line-height: 2; }
+    .about-foot { text-align: right; margin-top: 12px; }
+    .about-foot button { padding: 6px 16px; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; cursor: pointer; }
+
+    @media (max-width: 760px) {
+      body { flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+      #panel { width: 100%; height: auto; overflow: visible; border-right: 0; border-top: 1px solid var(--rule); padding-bottom: 80px; }
+      #map { order: -1; height: 62vh; width: 100%; flex: none; }
+      .about-head { flex-direction: column; align-items: center; text-align: center; }
     }
   </style>
 </head>
 
 <body>
+  <aside id="panel">
+    <div class="brand">
+      <div class="dots" aria-hidden="true"><span style="background:#00AEEF"></span><span style="background:#DA291C"></span><span style="background:#FFD100"></span></div>
+      <div>
+        <h1>Subte Musical</h1>
+        <p>Every train arriving at a station plays a note</p>
+      </div>
+    </div>
+    <div class="top-links">
+      <button class="pill" id="about-btn">About me</button>
+      <a class="pill" href="about.html">Credits</a>
+      <a class="pill" href="https://github.com/MakiJota/BA_gtfs_01" target="_blank" rel="noopener">Code</a>
+    </div>
 
+    <h2>1 · Timetable</h2>
+    <select id="city" aria-label="City"></select>
+    <div id="drop" role="button" tabindex="0">
+      <b>…or drop your own GTFS</b><br>a .zip, or the .txt files — any city
+      <input type="file" id="file" accept=".zip,.txt" multiple hidden>
+    </div>
+    <div id="status" aria-live="polite"></div>
+    <label class="row">Day <select id="day" style="grid-column: span 2"></select></label>
+    <div id="types"></div>
+    <details>
+      <summary>Large feed options</summary>
+      <label class="row">Max lines <input type="number" id="maxlines" value="60" min="1" max="300"><span></span></label>
+      <p class="hint">Big regional feeds (e.g. Västtrafik for Gothenburg) have hundreds of bus lines. Untick “Bus” and keep the busiest lines to stay musical.</p>
+    </details>
+    <div id="stats"></div>
+
+    <h2>2 · Play</h2>
+    <div class="transport">
+      <button id="play">▶ Play</button>
+      <span id="clock-readout">--:--</span>
+    </div>
+    <label class="row">Time of day <input type="range" id="scrub" min="300" max="1440" value="420"><span></span></label>
+    <label class="row">BPM <input type="range" id="bpm" min="40" max="200" step="1"><output id="bpm-out"></output></label>
+    <label class="row">Speed <input type="range" id="speed" min="0.25" max="10" step="0.25"><output id="speed-out"></output></label>
+    <div id="daylen"></div>
+    <label class="row">Scale <select id="scale" style="grid-column: span 2"></select></label>
+    <label class="row">Melody range <input type="range" id="range" min="1" max="15" step="1"><output id="range-out"></output></label>
+    <label class="row">Notes / line <input type="range" id="perline" min="1" max="4" step="1"><output id="perline-out"></output></label>
+    <label class="row">Volume <input type="range" id="volume" min="-40" max="0" step="1"><output id="volume-out"></output></label>
+    <p class="hint">Space = play/pause · scroll to zoom · drag to pan · R = reset view</p>
+
+    <div class="lines-head">
+      <h2>3 · Lines → notes</h2>
+      <span><button class="pill" id="mute-all">Mute all</button> <button class="pill" id="unmute-all">Unmute</button></span>
+    </div>
+    <p class="hint" style="margin-top:0">Note = the first station. Going along the line climbs the scale. Click a colour to hear it. M = mute, S = solo.</p>
+    <div id="lines"></div>
+  </aside>
+
+  <main id="map"></main>
+
+  <div id="about-modal">
+    <div class="about-box" role="dialog" aria-labelledby="about-title">
+      <h3 id="about-title">About me</h3>
+      <div class="about-head">
+        <img src="assets/JonathanCohen_386x386.jpg" alt="Jonathan Cohen">
+        <div>
+          <h4>¡Hola! My name is Jonathan.</h4>
+          <p>I work with digitization and data analytics, using data to explore and communicate insights that address urban challenges.
+            I enjoy diving into new data sets and finding creative ways to make sense of complex information.</p>
+        </div>
+      </div>
+      <p>This site is a little side quest that combines two things I love: cities and music. It turns public-transport timetables into sound. Every train that reaches a station plays a note.</p>
+      <p>The idea stands on the shoulders of <a href="http://mta.me/" target="_blank" rel="noopener">Conductor</a> by Alexander Chen and
+        <a href="https://amba-trenes-sonoros.vercel.app" target="_blank" rel="noopener">AMBA Trenes Sonoros</a> by Juan Torchia. See <a href="about.html">the full credits</a>.</p>
+      <p>If you have comments, suggestions, or want to collaborate on a similar project, feel free to reach out. I'm always happy to talk data, cities, and tech!</p>
+      <hr>
+      <h5>Connect with me:</h5>
+      <div class="about-links">
+        <div>✉️ Email: <a href="mailto:jonathan@nodal.se">jonathan@nodal.se</a></div>
+        <div>🌐 Website: <a href="https://nodalworks.se/" target="_blank" rel="noopener">nodalworks.se</a></div>
+        <div>💼 LinkedIn: <a href="https://www.linkedin.com/in/phd-cohen-urban-data/" target="_blank" rel="noopener">Jonathan Cohen - Urban Data</a></div>
+        <div>📷 Instagram: <a href="https://www.instagram.com/urba.ant" target="_blank" rel="noopener">@urba.ant</a></div>
+        <div>🎓 ResearchGate: <a href="https://www.researchgate.net/profile/Jonathan-Cohen-17?ev=prf_overview" target="_blank" rel="noopener">Jonathan Cohen</a></div>
+      </div>
+      <div class="about-foot"><button class="close">Close</button></div>
+    </div>
+  </div>
+
+  <!-- Buy Me a Coffee widget (same as Bird_gbg) -->
+  <script data-name="BMC-Widget" data-cfasync="false" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js"
+    data-id="RxCUuV5" data-description="Support me on Buy me a coffee!" data-message="Thanks for the coffee! :)"
+    data-color="#26B0A1" data-position="Right" data-x_margin="5" data-y_margin="5"></script>
 </body>
 </html>
