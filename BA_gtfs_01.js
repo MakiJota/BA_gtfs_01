@@ -44,8 +44,98 @@ function buildWorld(feed, boundary) {
       for (const poly of polys) for (const ring of poly) rings.push(ring.map(([lo, la]) => P(la, lo)));
     }
   }
+  // track shapes as flat arrays + cumulative length, for moving trains along the rails
+  const shapes = (feed.shapes || []).map(s => {
+    const n = s.pts.length;
+    const x = new Float32Array(n), y = new Float32Array(n), cum = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const q = P(s.pts[i][0], s.pts[i][1]);
+      x[i] = q[0]; y[i] = q[1];
+      if (i) cum[i] = cum[i - 1] + Math.hypot(x[i] - x[i - 1], y[i] - y[i - 1]);
+    }
+    return { line: s.line, x, y, cum };
+  });
   const tl = P(b.latMax, b.lonMin), br = P(b.latMin, b.lonMax);
-  return { sx, sy, lines, rings, minX: tl[0], minY: tl[1], maxX: br[0], maxY: br[1] };
+  return { sx, sy, lines, rings, shapes, geom: new WeakMap(), geomByKey: new Map(), minX: tl[0], minY: tl[1], maxX: br[0], maxY: br[1] };
+}
+
+// ---------- trains on the tracks ----------
+// For each trip pattern, find where each of its stations sits along a track shape
+// (in order). Trains then move along the shape between stations instead of in a straight line.
+function reversedShape(S) {
+  if (S.rev) return S.rev;
+  const n = S.x.length;
+  const x = new Float32Array(n), y = new Float32Array(n), cum = new Float32Array(n);
+  for (let i = 0; i < n; i++) { x[i] = S.x[n - 1 - i]; y[i] = S.y[n - 1 - i]; if (i) cum[i] = cum[i - 1] + Math.hypot(x[i] - x[i - 1], y[i] - y[i - 1]); }
+  S.rev = { x, y, cum };
+  return S.rev;
+}
+
+function snapStations(S, stations) {
+  const n = S.x.length, m = stations.length;
+  const idx = new Int32Array(m);
+  let from = 0, err = 0;
+  for (let k = 0; k < m; k++) {
+    const px = world.sx[stations[k]], py = world.sy[stations[k]];
+    let best = from, bd = Infinity;
+    for (let j = from; j < n; j++) {
+      const d = (S.x[j] - px) ** 2 + (S.y[j] - py) ** 2;
+      if (d < bd) { bd = d; best = j; }
+    }
+    idx[k] = best;
+    from = best;
+    err += Math.sqrt(bd);
+  }
+  return { idx, err: err / m };
+}
+
+function patternGeom(p) {
+  let g = world.geom.get(p);
+  if (g !== undefined) return g;
+  const key = p.line + '|' + p.shapeIdx + '|' + p.stations.join(',');
+  g = world.geomByKey.get(key);
+  if (g === undefined) {
+    const cands = p.shapeIdx >= 0 ? [p.shapeIdx] : [];
+    if (!cands.length) world.shapes.forEach((s, i) => { if (s.line === p.line) cands.push(i); });
+    let best = null;
+    for (const si of cands) {
+      for (const S of [world.shapes[si], reversedShape(world.shapes[si])]) {
+        const r = snapStations(S, p.stations);
+        if (!best || r.err < best.err) best = { S, idx: r.idx, err: r.err };
+      }
+    }
+    // ~4 world units ≈ 450 m: further than that, the shape isn't this route — fall back to straight lines
+    g = best && best.err < 4 ? best : null;
+    world.geomByKey.set(key, g);
+    if (!g) {
+      // no track shape fits (e.g. NYC's F has none in the feed): draw the route through its stations,
+      // so the trains always run on a visible line
+      const pl = [...p.stations].map(s => [world.sx[s], world.sy[s]]);
+      world.lines[p.line].push(pl);
+      layerDirty = true;
+    }
+  }
+  world.geom.set(p, g);
+  return g;
+}
+
+// position of a train between stop a and stop b (fraction u) of pattern p
+function trainXY(p, a, b, u) {
+  const g = patternGeom(p);
+  const sa = p.stations[a], sb = p.stations[b];
+  if (g) {
+    const i0 = g.idx[a], i1 = g.idx[b];
+    if (i1 > i0) {
+      const S = g.S;
+      const target = S.cum[i0] + u * (S.cum[i1] - S.cum[i0]);
+      let lo = i0, hi = i1;
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S.cum[m] <= target) lo = m; else hi = m; }
+      const seg = S.cum[hi] - S.cum[lo];
+      const v = seg > 0 ? (target - S.cum[lo]) / seg : 0;
+      return [S.x[lo] + (S.x[hi] - S.x[lo]) * v, S.y[lo] + (S.y[hi] - S.y[lo]) * v];
+    }
+  }
+  return [world.sx[sa] + (world.sx[sb] - world.sx[sa]) * u, world.sy[sa] + (world.sy[sb] - world.sy[sa]) * u];
 }
 
 function fitView() {
@@ -86,9 +176,9 @@ function renderLayer() {
   App.feed.lines.forEach((L, i) => {
     const off = cfgs[i] && (cfgs[i].mute || (anySolo && !cfgs[i].solo));
     const c = color(L.displayColor);
-    c.setAlpha(off ? 50 : 230);
+    c.setAlpha(off ? 110 : 235);
     g.stroke(c);
-    g.strokeWeight(3 * px);
+    g.strokeWeight((off ? 2.5 : 3.5) * px);
     for (const pl of world.lines[i]) {
       g.beginShape();
       for (const p of pl) g.vertex(p[0], p[1]);
@@ -165,12 +255,12 @@ function drawTrains(t, px, dark) {
     while (b - a > 1) { const m = (a + b) >> 1; if (offs[m] <= dt) a = m; else b = m; }
     const span = offs[b] - offs[a];
     const u = span > 0 ? Math.min(1, Math.max(0, (dt - offs[a]) / span)) : 0;
-    const sa = p.stations[a], sb = p.stations[b];
-    const x = world.sx[sa] + (world.sx[sb] - world.sx[sa]) * u;
-    const y = world.sy[sa] + (world.sy[sb] - world.sy[sa]) * u;
+    const [x, y] = trainXY(p, a, b, u);
     const off = cfgs[p.line] && (cfgs[p.line].mute || (anySolo && !cfgs[p.line].solo));
-    if (off) fill(dark ? 90 : 170); else fill(feed.lines[p.line].displayColor);
-    circle(x, y, 9 * px);
+    const c = color(feed.lines[p.line].displayColor);
+    if (off) c.setAlpha(110);   // muted lines keep their colour, just paler
+    fill(c);
+    circle(x, y, (off ? 7 : 9) * px);
   }
 }
 
@@ -207,7 +297,8 @@ function drawClock(t, dark) {
   const el = document.getElementById('clock-readout');
   if (el) el.textContent = fmtClock(t);
   const sl = document.getElementById('scrub');
-  if (sl && !sl.matches(':active') && Music.isPlaying()) sl.value = Math.round(t / 60);
+  // in "moment" mode the slider marks the chosen moment, so it stays put
+  if (sl && !sl.matches(':active') && Music.isPlaying() && App.mode !== 'moment') sl.value = Math.round(t / 60);
 }
 
 function drawMessage(msg) {
@@ -271,8 +362,12 @@ function mouseDragged() {
   lastInteract = millis();
 }
 function keyPressed(e) {
-  const tag = document.activeElement && document.activeElement.tagName;
-  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  const el = document.activeElement;
+  const typing = el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && /^(text|number|search)$/.test(el.type)));
+  if (typing) return;
+  if (el && el.tagName === 'SELECT') el.blur();   // dropdowns otherwise swallow the shortcut keys
   if (key === ' ') { App.togglePlay(); return false; }
-  if (key === 'r' || key === 'R') { if (world) fitView(); }
+  if (key === 'r' || key === 'R') { resetView(); return false; }
 }
+
+function resetView() { if (world) fitView(); }

@@ -31,6 +31,7 @@ const Music = (() => {
   let voices = [];                 // per line: {inst, channel, kind}
   let master = null, ready = false, playing = false, repeatId = null;
   let simCursor = 0, evPtr = 0;
+  let loop = null;                 // [start, end] in sim seconds: "play a moment"; null = the whole day
   let anchor = { sim: 0, real: 0, playing: false };
   const flashes = [];              // for the sketch: {station, line, real}
   const lineLevel = [];            // recent activity per line (0..1) for the UI meters
@@ -140,7 +141,8 @@ const Music = (() => {
       hits.push([ev.station[i], li]);
     }
     simCursor = to;
-    if (simCursor > feed.dayEnd) { simCursor = feed.dayStart; evPtr = lowerBound(simCursor); }
+    const [lo, hi] = loop || [feed.dayStart, feed.dayEnd];
+    if (simCursor >= hi || simCursor < lo) { simCursor = lo; evPtr = lowerBound(simCursor); }
     Tone.Draw.schedule(() => {
       const now = performance.now();
       anchor = { sim: from, real: now, playing: true };
@@ -196,6 +198,7 @@ const Music = (() => {
     if (key === 'bpm' && ready) Tone.Transport.bpm.rampTo(val, 0.1);
     if (key === 'volume' && ready) Tone.Destination.volume.rampTo(val, 0.1);
   }
+  function setLoop(start, end) { loop = start == null ? null : [start, end]; }
   // the feed's events were rebuilt (e.g. a line's frequency changed): re-find our place in time
   function refresh() { evPtr = lowerBound(simCursor); }
   function updateLine(i, patch) {
@@ -212,7 +215,8 @@ const Music = (() => {
 
   return {
     NOTE_NAMES, NOTE_LABELS, SCALES, INSTRUMENTS, settings: S,
-    play, pause, seek, simNow, setFeed, set, updateLine, refresh, preview, onChange,
+    play, pause, seek, simNow, setFeed, set, updateLine, refresh, preview, onChange, setLoop,
+    getLoop: () => loop,
     isPlaying: () => playing, flashes, lineLevel, lineCfg: () => lineCfg,
   };
 })();

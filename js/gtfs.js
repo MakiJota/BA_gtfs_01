@@ -308,25 +308,21 @@ const GTFS = (() => {
     };
 
     const patterns = new Map();
+    const skipped = { noTime: 0, noCoords: 0, backwards: 0, trips: 0 };
     for (const [id, rows] of st) {
       rows.sort((a, b) => a[0] - b[0]);
-      // fill missing times by linear interpolation along the sequence
-      const n = rows.length;
-      let last = -1;
-      for (let k = 0; k < n; k++) {
-        if (!isNaN(rows[k][1])) {
-          if (last >= 0 && k - last > 1) for (let j = last + 1; j < k; j++) rows[j][1] = rows[last][1] + (rows[k][1] - rows[last][1]) * (j - last) / (k - last);
-          last = k;
-        }
-      }
+      // Only real data: a stop without a time or without coordinates is skipped, never estimated.
+      // A time that goes backwards (bad row) is skipped too.
       const sts = [], times = [];
       for (const r of rows) {
-        if (isNaN(r[1])) continue;
+        if (isNaN(r[0]) || isNaN(r[1])) { skipped.noTime++; continue; }
         const si = stationOf(r[2]);
-        if (si < 0 || sts[sts.length - 1] === si) continue;
+        if (si < 0) { skipped.noCoords++; continue; }
+        if (sts[sts.length - 1] === si) continue;
+        if (times.length && r[1] < times[times.length - 1]) { skipped.backwards++; continue; }
         sts.push(si); times.push(r[1]);
       }
-      if (sts.length < 2) continue;
+      if (sts.length < 2 || times[times.length - 1] - times[0] <= 0) { skipped.trips++; continue; }
       const t0 = times[0];
       const offs = times.map(t => t - t0);
       const info = kept.get(id);
@@ -387,13 +383,20 @@ const GTFS = (() => {
         });
     }
     const polylines = lines.map(() => []);
+    const shapeList = [];            // [{line, pts:[[lat,lon]…]}] — trains travel along these
+    const shapeIndex = new Map();    // shape_id -> index in shapeList
     const lineHasShape = new Set();
     for (const [id, pts] of shapePts) {
       pts.sort((a, b) => a[0] - b[0]);
       const li = wantShapes.get(id);
-      polylines[li].push(pts.filter(q => !isNaN(q[1]) && !isNaN(q[2])).map(q => [q[1], q[2]]));
+      const clean = pts.filter(q => !isNaN(q[1]) && !isNaN(q[2])).map(q => [q[1], q[2]]);
+      if (clean.length < 2) continue;
+      shapeIndex.set(id, shapeList.length);
+      shapeList.push({ line: li, pts: clean });
+      polylines[li].push(clean);
       lineHasShape.add(li);
     }
+    for (const p of pats) p.shapeIdx = p.shape && shapeIndex.has(p.shape) ? shapeIndex.get(p.shape) : -1;
     const seenSeq = new Set();
     for (const p of pats) {
       if (lineHasShape.has(p.line)) continue;
@@ -411,10 +414,10 @@ const GTFS = (() => {
 
     progress('');
     const feed = {
-      date, lines, patterns: pats, polylines,
+      date, lines, patterns: pats, polylines, shapes: shapeList,
       stations: { lat: Float64Array.from(stLat), lon: Float64Array.from(stLon), name: stName },
       bbox,
-      stats: { lines: lines.length, droppedLines: dropped, stopTimeRows: rowsSeen, usedAllServices: !active && date != null },
+      stats: { lines: lines.length, droppedLines: dropped, stopTimeRows: rowsSeen, usedAllServices: !active && date != null, skipped },
     };
     schedule(feed, null);
     feed.dayStart = feed.span.start;   // the day's range stays fixed, whatever the frequencies
@@ -422,53 +425,52 @@ const GTFS = (() => {
     return feed;
   }
 
-  // Re-space a pattern's departures so the line runs `f` times as often (f=2: twice as many trains).
-  // Departures are interpolated inside each service run; long gaps (e.g. the night) are never filled.
-  // deps: departures of one line+direction, sorted [{s, p}]. Each new departure reuses the pattern
-  // (route + running times) of the nearest original one.
-  function warp(deps, f) {
-    if (f === 1) return deps;
-    if (f <= 0) return [];
+  // A line set to a fixed number of trains: N trains shuttle back and forth all service day, evenly
+  // spaced, on the line's most common route in each direction. At any moment exactly N are running.
+  // dirGroups: [[{s,p}…] per direction], each sorted.
+  function fixedTrains(dirGroups, N, span) {
+    if (!(N > 0)) return [];
+    const refs = dirGroups.map(g => {           // most frequent pattern of this direction
+      const count = new Map();
+      for (const d of g) count.set(d.p, (count.get(d.p) || 0) + 1);
+      return [...count.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    });
+    const durs = refs.map(p => p.offsets[p.offsets.length - 1]);
+    const T = durs.reduce((a, b) => a + b, 0);  // one full round trip
+    if (!(T > 0)) return [];
+    // run over the whole day range (the time slider), so N holds wherever you listen
+    let first = span ? span[0] : Infinity, last = span ? span[1] : -Infinity;
+    if (!span) for (const g of dirGroups) { first = Math.min(first, g[0].s); last = Math.max(last, g[g.length - 1].s); }
+    const h = T / N;                            // spacing between trains
     const out = [];
-    const gaps = [];
-    for (let i = 1; i < deps.length; i++) gaps.push(deps[i].s - deps[i - 1].s);
-    gaps.sort((a, b) => a - b);
-    const median = gaps.length ? gaps[gaps.length >> 1] : 0;
-    const breakGap = Math.max(1800, median * 3);
-    const flush = (a, b) => { // deps[a..b] is one continuous run
-      const n = b - a + 1;
-      if (n === 1) { if (f >= 0.5) out.push(deps[a]); return; }
-      const total = (n - 1) * f;
-      for (let k = 0; k <= total + 1e-9; k++) {
-        const x = k / f;
-        const i = Math.min(n - 2, Math.floor(x));
-        const u = x - i;
-        const A = deps[a + i], B = deps[a + i + 1];
-        out.push({ s: A.s + (B.s - A.s) * u, p: u < 0.5 ? A.p : B.p });
-      }
-    };
-    let runStart = 0;
-    for (let i = 1; i <= deps.length; i++) {
-      if (i === deps.length || deps[i].s - deps[i - 1].s > breakGap) { flush(runStart, i - 1); runStart = i; }
-    }
+    let phase = 0;
+    refs.forEach((p, d) => {
+      // start one round trip early so the line is already "full" when service begins;
+      // direction d starts after the earlier legs, so each train returns as the next leg
+      for (let s = first - T + phase; s <= last; s += h) if (s + durs[d] >= first) out.push({ s, p });
+      phase += durs[d];
+    });
     return out;
   }
 
-  // (Re)build train instances and the time-sorted note events. freq[line] = frequency factor (default 1).
-  function schedule(feed, freq) {
+  // (Re)build train instances and the time-sorted note events.
+  // fixed[line] = a number of trains to run all day, or null/undefined to follow the timetable.
+  function schedule(feed, fixed) {
     const pats = feed.patterns;
-    const groups = new Map();
+    const groups = new Map();   // line -> Map(dir -> [{s,p}])
     for (const p of pats) {
-      const key = p.line + '|' + p.dir;
-      if (!groups.has(key)) groups.set(key, []);
-      const g = groups.get(key);
+      if (!groups.has(p.line)) groups.set(p.line, new Map());
+      const byDir = groups.get(p.line);
+      if (!byDir.has(p.dir)) byDir.set(p.dir, []);
+      const g = byDir.get(p.dir);
       for (const s of p.starts) g.push({ s, p });
     }
     const deps = [];
-    for (const g of groups.values()) {
-      g.sort((a, b) => a.s - b.s);
-      const f = freq && freq[g[0].p.line] !== undefined ? freq[g[0].p.line] : 1;
-      for (const d of warp(g, f)) deps.push(d);
+    for (const [li, byDir] of groups) {
+      const dirGroups = [...byDir.entries()].sort((a, b) => a[0] - b[0]).map(e => e[1].sort((a, b) => a.s - b.s));
+      const N = fixed ? fixed[li] : null;
+      if (N === null || N === undefined) { for (const g of dirGroups) for (const d of g) deps.push(d); }
+      else for (const d of fixedTrains(dirGroups, N, feed.dayEnd !== undefined ? [feed.dayStart, feed.dayEnd] : null)) deps.push(d);
     }
     let total = 0;
     for (const d of deps) total += d.p.stations.length;

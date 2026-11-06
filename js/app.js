@@ -17,7 +17,8 @@ const INST_BY_GROUP = {
 
 const App = {
   feed: null, meta: null, boundary: null, city: null, status: '', title: '', redrawLines: false,
-  togglePlay() { Music.isPlaying() ? Music.pause() : Music.play(); },
+  mode: 'day',   // 'day' = play the whole day; 'moment' = loop a window around the chosen time
+  togglePlay() { Music.isPlaying() ? Music.pause() : startMode(App.mode); },
   changeTrains: (i, d) => changeTrains(i, d),
 };
 
@@ -121,10 +122,10 @@ async function rebuild() {
       const midi = parseNote(s.note);
       if (midi !== null) cfgs[i].midi = midi;
       if (s.instrument && Music.INSTRUMENTS[s.instrument]) cfgs[i].instrument = s.instrument;
-      cfgs[i].mute = !!s.mute;
-      if (typeof s.trains === 'number' && s.trains >= 0) cfgs[i].freq = s.trains;
+      cfgs[i].mute = s.mute !== undefined ? !!s.mute : false;
+      if (Number.isInteger(s.fixedTrains) && s.fixedTrains >= 0) cfgs[i].fixed = s.fixedTrains;
     });
-    if (cfgs.some(c => c.freq !== 1)) GTFS.schedule(feed, cfgs.map(c => c.freq));
+    if (cfgs.some(c => c.fixed != null)) GTFS.schedule(feed, cfgs.map(c => c.fixed));
     App.feed = feed;
     App.title = App.city.name;
     App.activeCounts = [];
@@ -135,6 +136,10 @@ async function rebuild() {
     sc.min = Math.floor(feed.dayStart / 60);
     sc.max = Math.ceil(feed.dayEnd / 60);
     sc.value = Math.round(Music.simNow() / 60);
+    if (P && (P.mode === 'day' || P.mode === 'moment')) App.mode = P.mode;
+    if (P && P.window) $('window').value = String(P.window);
+    if (App.mode === 'moment') applyLoop(false); else Music.setLoop(null);
+    paintModes();
     showStats();
     setStatus(feed.events.n ? (P ? `Loaded shared setup${P.title ? ` “${P.title}”` : ''} — press Play` : '') : 'No trains found for this selection');
     dayLen();
@@ -149,7 +154,8 @@ function defaultLineCfg(L, i) {
   if (letter.length === 1 && GERMAN[letter] !== undefined) midi = ('ABH'.includes(letter) ? 48 : 60) + GERMAN[letter];
   else midi = 48 + PENTA[i % 5] + 12 * (Math.floor(i / 5) % 3);
   const pool = INST_BY_GROUP[L.group] || INST_BY_GROUP.other;
-  const cfg = { midi, instrument: pool[i % pool.length], mute: false, solo: false, freq: 1 };
+  // every line starts muted: you switch on the voices you want to hear
+  const cfg = { midi, instrument: pool[i % pool.length], mute: true, solo: false, fixed: null };
   const ov = App.city.lines && App.city.lines[L.name];
   return ov ? { ...cfg, ...ov } : cfg;
 }
@@ -197,44 +203,63 @@ const SPEAKER_ON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden=
 const SPEAKER_OFF = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 
 // ---------- trains per line ----------
-// The counter shows trains running now; + / − / clicking a line rescales that line's timetable
-// frequency so one train more (or less) is running at this moment.
+// Timetable lines show the average number of trains running over the next/last 15 minutes
+// (a steady number, not one that flickers as trains come and go).
+// Touching + / − / the line switches it to a FIXED number of trains: exactly N run all day.
+const SMOOTH_WINDOW = 1800;
+function smoothedCounts() {
+  const f = App.feed;
+  const counts = new Array(f.lines.length).fill(0);
+  const t = Music.simNow(), a = t - SMOOTH_WINDOW / 2, b = t + SMOOTH_WINDOW / 2;
+  const inst = f.instances;
+  let lo = 0, hi = inst.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (inst[m].s < a - f.maxDur) lo = m + 1; else hi = m; }
+  for (let k = lo; k < inst.length && inst[k].s <= b; k++) {
+    const it = inst[k];
+    const overlap = Math.min(it.e, b) - Math.max(it.s, a);
+    if (overlap > 0) counts[it.p.line] += overlap / SMOOTH_WINDOW;
+  }
+  return counts;
+}
+
 let rescheduleTimer = null;
 function changeTrains(i, delta) {
   if (!App.feed) return;
   const cfg = Music.lineCfg()[i];
-  const n = (App.activeCounts && App.activeCounts[i]) || 0;
-  let f = cfg.freq;
-  if (delta > 0) f = n > 0 ? f * (n + 1) / n : f + 0.5;
-  else f = n > 1 ? f * (n - 1) / n : 0;
-  f = Math.max(0, Math.min(16, f));
-  Music.updateLine(i, { freq: f });
-  if (App.activeCounts) App.activeCounts[i] = Math.max(0, n + Math.sign(delta)); // instant feedback
+  const now = cfg.fixed != null ? cfg.fixed : Math.round(smoothedCounts()[i]);
+  const N = Math.max(0, Math.min(80, now + delta));
+  Music.updateLine(i, { fixed: N });
   updateCounts();
   clearTimeout(rescheduleTimer);
   rescheduleTimer = setTimeout(reschedule, 120);
-  setStatus(`Line ${App.feed.lines[i].name}: ${f === 0 ? 'no trains' : `${Math.round(f * 100)}% of the timetable`}`);
+  setStatus(`Line ${App.feed.lines[i].name}: ${N === 0 ? 'no trains' : `${N} train${N > 1 ? 's' : ''}, evenly spaced, all day`} — Reset trains goes back to the timetable`);
 }
 function reschedule() {
   try {
-    GTFS.schedule(App.feed, Music.lineCfg().map(c => c.freq));
+    GTFS.schedule(App.feed, Music.lineCfg().map(c => c.fixed));
     Music.refresh();
     showStats();
   } catch (e) { fail(e); }
 }
 function resetTrains() {
-  Music.lineCfg().forEach((c, i) => Music.updateLine(i, { freq: 1 }));
+  Music.lineCfg().forEach((c, i) => Music.updateLine(i, { fixed: null }));
   reschedule();
-  setStatus('Back to the timetable’s frequencies');
+  updateCounts();
+  setStatus('Back to the timetable');
 }
 function updateCounts() {
+  if (!App.feed) return;
   const rows = document.querySelectorAll('#lines .line-row');
   const cfgs = Music.lineCfg();
+  const avg = smoothedCounts();
   rows.forEach((row, i) => {
-    const n = App.activeCounts ? App.activeCounts[i] || 0 : 0;
+    const fixed = cfgs[i] && cfgs[i].fixed != null;
     const c = row.querySelector('.count');
-    c.textContent = n;
-    c.classList.toggle('changed', !!cfgs[i] && Math.abs(cfgs[i].freq - 1) > 1e-6);
+    c.textContent = fixed ? cfgs[i].fixed : Math.round(avg[i]);
+    c.classList.toggle('changed', fixed);
+    row.querySelector('.trains').title = fixed
+      ? `${cfgs[i].fixed} trains, evenly spaced, all day (Reset trains = back to the timetable)`
+      : 'Trains running on average around this time (from the timetable)';
   });
 }
 function showStats() {
@@ -293,11 +318,18 @@ function initUI() {
   $('day').addEventListener('change', rebuild);
   $('maxlines').addEventListener('change', rebuild);
 
-  const playBtn = $('play');
-  playBtn.addEventListener('click', () => App.togglePlay());
-  Music.onChange(() => { playBtn.textContent = Music.isPlaying() ? '❚❚ Pause' : '▶ Play'; playBtn.classList.toggle('on', Music.isPlaying()); });
-
-  $('scrub').addEventListener('input', e => Music.seek(parseInt(e.target.value, 10) * 60));
+  // two ways to play: the whole day, or a loop around one moment
+  $('play-day').addEventListener('click', () => (Music.isPlaying() && App.mode === 'day') ? Music.pause() : startMode('day'));
+  $('play-moment').addEventListener('click', () => (Music.isPlaying() && App.mode === 'moment') ? Music.pause() : startMode('moment'));
+  Music.onChange(paintModes);
+  $('scrub').addEventListener('input', e => {
+    Music.seek(parseInt(e.target.value, 10) * 60);
+    if (App.mode === 'moment') applyLoop(true);
+  });
+  $('window').addEventListener('change', () => { if (App.mode === 'moment') applyLoop(true); });
+  $('reset-view').addEventListener('click', () => resetView());
+  // dropdowns keep keyboard focus after a choice, which would swallow Space / R
+  document.addEventListener('change', e => { if (e.target.tagName === 'SELECT') e.target.blur(); });
 
   const bind = (id, key, parse, label) => {
     const el = $(id);
@@ -351,6 +383,39 @@ function initUI() {
   });
 }
 
+// ---------- play modes ----------
+function startMode(mode) {
+  if (!App.feed) return;
+  App.mode = mode;
+  if (mode === 'moment') applyLoop(true);
+  else Music.setLoop(null);
+  Music.play();
+  paintModes();
+  const anyOn = Music.lineCfg().some(c => !c.mute);
+  if (!anyOn) setStatus('All lines are muted — turn some on with 🔇 (or Unmute all) to hear them');
+}
+// loop [time, time + window]; jump=true also moves the playhead to the loop start
+function applyLoop(jump) {
+  const start = parseInt($('scrub').value, 10) * 60;
+  const end = Math.min(App.feed.dayEnd, start + parseInt($('window').value, 10) * 60);
+  Music.setLoop(start, end);
+  if (jump) Music.seek(start);
+  paintModes();
+}
+function paintModes() {
+  const playing = Music.isPlaying();
+  const day = $('play-day'), mom = $('play-moment');
+  day.classList.toggle('on', playing && App.mode === 'day');
+  mom.classList.toggle('on', playing && App.mode === 'moment');
+  day.textContent = playing && App.mode === 'day' ? '❚❚ Pause' : '▶ Play the day';
+  mom.textContent = playing && App.mode === 'moment' ? '❚❚ Pause' : '⟳ Play a moment';
+  const loop = Music.getLoop();
+  const fmt = s => `${String(Math.floor(s / 3600) % 24).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}`;
+  $('mode-note').textContent = App.mode === 'moment' && loop
+    ? `looping ${fmt(loop[0])}–${fmt(loop[1])}`
+    : App.feed ? `whole day ${fmt(App.feed.dayStart)}–${fmt(App.feed.dayEnd)}` : '';
+}
+
 function setTheme(t) {
   document.documentElement.dataset.theme = t;
   $('theme').textContent = t === 'dark' ? '☀️' : '🌙';
@@ -376,9 +441,9 @@ function currentSetup() {
   App.feed.lines.forEach((L, i) => {
     const c = cfgs[i];
     lines[L.name] = { note: midiName(c.midi), instrument: c.instrument };
-    if (c.mute) lines[L.name].mute = true;
     if (c.solo) lines[L.name].solo = true;
-    if (Math.abs(c.freq - 1) > 1e-6) lines[L.name].trains = Math.round(c.freq * 1000) / 1000;
+    lines[L.name].mute = !!c.mute;
+    if (c.fixed != null) lines[L.name].fixedTrains = c.fixed;
   });
   const S = Music.settings;
   return {
@@ -390,7 +455,9 @@ function currentSetup() {
     date: $('day').value ? parseInt($('day').value, 10) : null,
     groups: [...document.querySelectorAll('#types input:checked')].map(i => i.value),
     maxLines: parseInt($('maxlines').value, 10) || 60,
-    time: Math.round(Music.simNow()),
+    time: App.mode === 'moment' && Music.getLoop() ? Music.getLoop()[0] : Math.round(Music.simNow()),
+    mode: App.mode,
+    window: parseInt($('window').value, 10),
     settings: { bpm: S.bpm, minutesPerBeat: S.minutesPerBeat, scale: S.scale, range: S.range, perLine: S.perLine, volume: S.volume },
     lines,
   };

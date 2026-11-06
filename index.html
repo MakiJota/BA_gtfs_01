@@ -73,13 +73,20 @@
     .chk { display: inline-flex; align-items: center; gap: 4px; margin: 2px 10px 2px 0; }
     .chk small { color: var(--muted); }
 
-    .transport { display: flex; align-items: center; gap: 10px; }
-    #play {
-      font: inherit; font-weight: 600; cursor: pointer; border: 0; border-radius: 8px; padding: 9px 18px;
-      background: var(--accent); color: var(--accent-ink);
+    .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .mode {
+      font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px; padding: 9px 6px;
+      border: 1.5px solid var(--accent); background: var(--field); color: var(--ink);
     }
-    #play.on { background: var(--ink); color: var(--panel); }
+    .mode.on { background: var(--accent); color: var(--accent-ink); }
+    .transport { display: flex; align-items: baseline; gap: 10px; margin-top: 6px; }
     #clock-readout { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    #mode-note { color: var(--muted); font-size: 12.5px; }
+    #reset-view {
+      position: absolute; top: 14px; right: 14px; z-index: 5; font: 13px system-ui, sans-serif; cursor: pointer;
+      background: var(--panel); color: var(--ink); border: 1px solid var(--rule); border-radius: 999px; padding: 5px 12px;
+    }
+    #reset-view:hover { border-color: var(--accent); }
 
     .lines-head { display: flex; align-items: center; justify-content: space-between; }
     .lines-head .pill { padding: 2px 8px; font-size: 12px; }
@@ -170,11 +177,24 @@
     <div id="stats"></div>
 
     <h2>2 · Play</h2>
-    <div class="transport">
-      <button id="play">▶ Play</button>
-      <span id="clock-readout">--:--</span>
+    <div class="modes">
+      <button id="play-day" class="mode">▶ Play the day</button>
+      <button id="play-moment" class="mode">⟳ Play a moment</button>
     </div>
-    <label class="row">Time of day <input type="range" id="scrub" min="300" max="1440" value="420"><span></span></label>
+    <div class="transport">
+      <span id="clock-readout">--:--</span>
+      <span id="mode-note"></span>
+    </div>
+    <label class="row">Time <input type="range" id="scrub" min="300" max="1440" value="420"><span></span></label>
+    <label class="row">Moment length
+      <select id="window" style="grid-column: span 2">
+        <option value="10">10 minutes</option>
+        <option value="20">20 minutes</option>
+        <option value="30" selected>30 minutes</option>
+        <option value="60">1 hour</option>
+        <option value="120">2 hours</option>
+      </select>
+    </label>
     <label class="row">BPM <input type="range" id="bpm" min="40" max="200" step="1"><output id="bpm-out"></output></label>
     <label class="row">Speed <input type="range" id="speed" min="0.25" max="10" step="0.25"><output id="speed-out"></output></label>
     <div id="daylen"></div>
@@ -182,7 +202,7 @@
     <label class="row">Melody range <input type="range" id="range" min="1" max="15" step="1"><output id="range-out"></output></label>
     <label class="row">Notes / line <input type="range" id="perline" min="1" max="4" step="1"><output id="perline-out"></output></label>
     <label class="row">Volume <input type="range" id="volume" min="-40" max="0" step="1"><output id="volume-out"></output></label>
-    <p class="hint">Space = play/pause · scroll to zoom · drag to pan · R = reset view</p>
+    <p class="hint">Space = play/pause · scroll to zoom · drag to pan · R = reset view. <b>Play a moment</b> loops the time you pick, so you can compare 7 am with 3 pm.</p>
 
     <h2>Save &amp; share</h2>
     <div class="share-row">
@@ -201,11 +221,11 @@
       <button class="pill" id="unmute-all">🔊 Unmute all</button>
       <button class="pill" id="reset-trains">↺ Reset trains</button>
     </div>
-    <p class="hint">Note = the first station; going along the line climbs the scale. <b>− n +</b> = trains running now. <b>Click a line</b> (here or on the map) to launch one more train.</p>
+    <p class="hint"><b>All lines start muted</b>: turn on the ones you want with 🔇, or Unmute all. Note = the first station; going along the line climbs the scale. <b>− n +</b> = trains running now. <b>Click a line</b> (here or on the map) to launch one more train.</p>
     <div id="lines"></div>
   </aside>
 
-  <main id="map"></main>
+  <main id="map"><button id="reset-view" title="Fit the whole network (R)">⟲ Reset view</button></main>
 
   <div id="about-modal">
     <div class="about-box" role="dialog" aria-labelledby="about-title">
