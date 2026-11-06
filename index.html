@@ -34,7 +34,7 @@
       font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden;
     }
     #panel {
-      width: 340px; flex-shrink: 0; height: 100%; overflow-y: auto; background: var(--panel);
+      width: 370px; flex-shrink: 0; height: 100%; overflow-y: auto; background: var(--panel);
       border-right: 1px solid var(--rule); padding: 14px 16px 90px;
     }
     #map { flex: 1; min-width: 0; height: 100%; position: relative; overflow: hidden; }
@@ -83,19 +83,21 @@
 
     .lines-head { display: flex; align-items: center; justify-content: space-between; }
     .lines-head .pill { padding: 2px 8px; font-size: 12px; }
-    .line-row { display: grid; grid-template-columns: 46px 1fr 44px 1.4fr 26px 26px; gap: 4px; align-items: center; margin: 4px 0; }
-    .line-row select { padding: 3px 2px; font-size: 13px; }
+    .line-row { display: grid; grid-template-columns: 40px 50px 38px 1fr 66px 26px; gap: 4px; align-items: center; margin: 4px 0; }
+    .line-row select { padding: 3px 1px; font-size: 13px; }
+    .trains { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--rule); border-radius: 6px; background: var(--field); height: 28px; }
+    .trains .step { border: 0; background: none; color: var(--ink); font-size: 15px; width: 20px; height: 100%; cursor: pointer; padding: 0; }
+    .trains .step:hover { color: var(--accent); }
+    .trains .count { font-size: 12.5px; font-variant-numeric: tabular-nums; min-width: 18px; text-align: center; }
+    .trains .count.changed { color: var(--accent); }
+    .spk { border: 0; background: none; color: var(--ink); cursor: pointer; padding: 0; height: 28px; display: grid; place-items: center; }
+    .spk.off { color: #d9534f; }
     .swatch {
       border: 0; border-radius: 6px; height: 28px; font-weight: 700; font-size: 12px; cursor: pointer;
       overflow: hidden; white-space: nowrap; padding: 0 3px;
     }
-    .tog {
-      height: 26px; border: 1px solid var(--rule); border-radius: 5px; background: var(--field); color: var(--muted);
-      font-weight: 700; font-size: 11px; cursor: pointer; padding: 0;
-    }
-    .tog.mute.on { background: #d9534f; border-color: #d9534f; color: #fff; }
-    .tog.solo.on { background: #f0ad4e; border-color: #f0ad4e; color: #000; }
     .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+    .share-row { display: flex; flex-wrap: wrap; gap: 6px; }
     details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-top: 8px; }
 
     body.dragging #map::after {
@@ -111,19 +113,19 @@
     }
     #about-modal.open { display: flex; align-items: flex-start; justify-content: center; }
     .about-box {
-      background: #fff; color: #222; max-width: 720px; width: 100%; margin-top: 40px;
+      background: var(--panel); color: var(--ink); max-width: 720px; width: 100%; margin-top: 40px;
       border-radius: 8px; padding: 20px 24px; font: 15px/1.55 system-ui, sans-serif;
     }
-    .about-box h3 { margin: 0 0 16px; color: #001E51; }
+    .about-box h3 { margin: 0 0 16px; color: var(--navy); }
     .about-head { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 12px; }
     .about-head img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid #4d90a8; flex-shrink: 0; }
-    .about-head h4 { margin: 0 0 6px; color: #001E51; }
-    .about-box a { color: #4d90a8; text-decoration: none; }
+    .about-head h4 { margin: 0 0 6px; color: var(--navy); }
+    .about-box a { color: var(--link); text-decoration: none; }
     .about-box hr { border: 0; border-top: 1px solid #4d90a8; margin: 16px 0; }
-    .about-box h5 { margin: 0 0 6px; color: #001E51; font-size: 15px; }
+    .about-box h5 { margin: 0 0 6px; color: var(--navy); font-size: 15px; }
     .about-links { line-height: 2; }
     .about-foot { text-align: right; margin-top: 12px; }
-    .about-foot button { padding: 6px 16px; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; cursor: pointer; }
+    .about-foot button { font: inherit; padding: 6px 16px; border: 1px solid var(--rule); border-radius: 4px; background: var(--field); color: var(--ink); cursor: pointer; }
 
     @media (max-width: 760px) {
       body { flex-direction: column; overflow-x: hidden; overflow-y: auto; }
@@ -147,6 +149,7 @@
       <button class="pill" id="about-btn">About me</button>
       <a class="pill" href="about.html">Credits</a>
       <a class="pill" href="https://github.com/MakiJota/BA_gtfs_01" target="_blank" rel="noopener">Code</a>
+      <button class="pill" id="theme" aria-label="Switch light / dark mode" title="Light / dark mode">🌙</button>
     </div>
 
     <h2>1 · Timetable</h2>
@@ -156,10 +159,11 @@
       <input type="file" id="file" accept=".zip,.txt" multiple hidden>
     </div>
     <div id="status" aria-live="polite"></div>
-    <label class="row">Day <select id="day" style="grid-column: span 2"></select></label>
     <div id="types"></div>
     <details>
-      <summary>Large feed options</summary>
+      <summary>More options (day, max lines)</summary>
+      <label class="row">Day <select id="day" style="grid-column: span 2"></select></label>
+      <p class="hint" style="margin-top:0">The busiest day of the feed is picked for you.</p>
       <label class="row">Max lines <input type="number" id="maxlines" value="60" min="1" max="300"><span></span></label>
       <p class="hint">Big regional feeds (e.g. Västtrafik for Gothenburg) have hundreds of bus lines. Untick “Bus” and keep the busiest lines to stay musical.</p>
     </details>
@@ -180,11 +184,24 @@
     <label class="row">Volume <input type="range" id="volume" min="-40" max="0" step="1"><output id="volume-out"></output></label>
     <p class="hint">Space = play/pause · scroll to zoom · drag to pan · R = reset view</p>
 
+    <h2>Save &amp; share</h2>
+    <div class="share-row">
+      <button class="pill" id="share">🔗 Copy link</button>
+      <button class="pill" id="save">💾 Save .maki</button>
+      <button class="pill" id="load">📂 Load .maki</button>
+      <input type="file" id="maki-file" accept=".maki,.json" hidden>
+    </div>
+    <p class="hint">Stores the city, BPM, speed, scale, time and every line's note, instrument, sound on/off and number of trains, so whoever opens it hears exactly what you hear. You can also drop a .maki file on the page.</p>
+
     <div class="lines-head">
       <h2>3 · Lines → notes</h2>
-      <span><button class="pill" id="mute-all">Mute all</button> <button class="pill" id="unmute-all">Unmute</button></span>
     </div>
-    <p class="hint" style="margin-top:0">Note = the first station. Going along the line climbs the scale. Click a colour to hear it. M = mute, S = solo.</p>
+    <div class="share-row">
+      <button class="pill" id="mute-all">🔇 Mute all</button>
+      <button class="pill" id="unmute-all">🔊 Unmute all</button>
+      <button class="pill" id="reset-trains">↺ Reset trains</button>
+    </div>
+    <p class="hint">Note = the first station; going along the line climbs the scale. <b>− n +</b> = trains running now. <b>Click a line</b> (here or on the map) to launch one more train.</p>
     <div id="lines"></div>
   </aside>
 
@@ -196,7 +213,7 @@
       <div class="about-head">
         <img src="assets/JonathanCohen_386x386.jpg" alt="Jonathan Cohen">
         <div>
-          <h4>¡Hola! My name is Jonathan.</h4>
+          <h4>Hi! My name is Jonathan.</h4>
           <p>I work with digitization and data analytics, using data to explore and communicate insights that address urban challenges.
             I enjoy diving into new data sets and finding creative ways to make sense of complex information.</p>
         </div>

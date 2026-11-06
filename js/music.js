@@ -196,6 +196,8 @@ const Music = (() => {
     if (key === 'bpm' && ready) Tone.Transport.bpm.rampTo(val, 0.1);
     if (key === 'volume' && ready) Tone.Destination.volume.rampTo(val, 0.1);
   }
+  // the feed's events were rebuilt (e.g. a line's frequency changed): re-find our place in time
+  function refresh() { evPtr = lowerBound(simCursor); }
   function updateLine(i, patch) {
     Object.assign(lineCfg[i], patch);
   }
@@ -210,7 +212,7 @@ const Music = (() => {
 
   return {
     NOTE_NAMES, NOTE_LABELS, SCALES, INSTRUMENTS, settings: S,
-    play, pause, seek, simNow, setFeed, set, updateLine, preview, onChange,
+    play, pause, seek, simNow, setFeed, set, updateLine, refresh, preview, onChange,
     isPlaying: () => playing, flashes, lineLevel, lineCfg: () => lineCfg,
   };
 })();

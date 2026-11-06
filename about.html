@@ -1,64 +1,53 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en" data-lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Subte Musical · About</title>
+  <script>
+    // theme + language before first paint (shared with the main page)
+    (function () {
+      var t = null, l = null;
+      try { t = localStorage.getItem('theme'); l = localStorage.getItem('lang'); } catch (e) {}
+      if (!t) t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = t;
+      if (l === 'es') { document.documentElement.dataset.lang = 'es'; document.documentElement.lang = 'es'; }
+    })();
+  </script>
   <style>
     :root {
-      --bg: #f4f2ee;
-      --card: #ffffff;
-      --ink: #1d1d1f;
-      --muted: #5f6368;
-      --rule: #e2ded6;
-      --accent: #DA291C;
+      --bg: #f4f2ee; --card: #ffffff; --ink: #1d1d1f; --muted: #5f6368; --rule: #e2ded6; --accent: #DA291C;
       --A: #00AEEF; --B: #DA291C; --C: #003DA5; --D: #009739; --E: #702082; --H: #FFD100; --P: #FFBD33;
     }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #16171a; --card: #202226; --ink: #ececec; --muted: #a3a7ad; --rule: #33363b; --accent: #ff6b5e; }
-    }
+    :root[data-theme="dark"] { --bg: #16171a; --card: #202226; --ink: #ececec; --muted: #a3a7ad; --rule: #33363b; --accent: #ff6b5e; }
+    html[data-lang="en"] [lang="es"], html[data-lang="es"] [lang="en"] { display: none; }
     * { box-sizing: border-box; }
-    body {
-      margin: 0; background: var(--bg); color: var(--ink);
-      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
     .wrap { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
     header { display: flex; gap: 16px; align-items: center; margin-bottom: 8px; }
     .logo { display: flex; gap: 4px; flex-shrink: 0; }
-    .logo span {
-      width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
-      font-weight: 800; font-size: 15px; color: #fff;
-    }
-    .logo span.dark-text { color: #000; }
+    .logo span { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 15px; color: #fff; }
     h1 { margin: 0; font-size: 28px; line-height: 1.2; }
     .subtitle { margin: 2px 0 0; color: var(--muted); }
-    nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 20px 0 28px; }
-    nav a {
-      text-decoration: none; color: var(--ink); background: var(--card);
-      border: 1px solid var(--rule); border-radius: 999px; padding: 6px 14px; font-size: 14px;
+    nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 20px 0 28px; align-items: center; }
+    nav a, nav button {
+      font: inherit; font-size: 14px; cursor: pointer; text-decoration: none; color: var(--ink); background: var(--card);
+      border: 1px solid var(--rule); border-radius: 999px; padding: 6px 14px;
     }
-    nav a:hover { border-color: var(--accent); }
-    section {
-      background: var(--card); border: 1px solid var(--rule); border-radius: 12px;
-      padding: 20px 22px; margin-bottom: 16px;
-    }
+    nav a:hover, nav button:hover { border-color: var(--accent); }
+    nav .spacer { flex: 1; }
+    section { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 20px 22px; margin-bottom: 16px; }
     h2 { margin: 0 0 8px; font-size: 20px; }
     h3 { margin: 16px 0 4px; font-size: 16px; }
     p { margin: 8px 0; }
-    .en { color: var(--muted); font-size: 15px; }
     a { color: var(--accent); }
     .lines { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin-top: 12px; }
-    .line {
-      border: 1px solid var(--rule); border-radius: 10px; padding: 10px; display: flex; gap: 10px; align-items: center;
-    }
-    .line b {
-      width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex-shrink: 0;
-    }
+    .line { border: 1px solid var(--rule); border-radius: 10px; padding: 10px; display: flex; gap: 10px; align-items: center; }
+    .line b { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex-shrink: 0; }
     .line small { color: var(--muted); display: block; line-height: 1.3; }
     .credit { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; margin: 14px 0; }
     .credit .meta { color: var(--muted); font-size: 14px; }
     ul { margin: 8px 0; padding-left: 20px; }
-    .status { display: inline-block; font-size: 13px; padding: 2px 10px; border-radius: 999px; background: var(--H); color: #000; font-weight: 600; }
     footer { color: var(--muted); font-size: 14px; text-align: center; margin-top: 28px; }
   </style>
 </head>
@@ -66,106 +55,143 @@
   <div class="wrap">
     <header>
       <div class="logo" aria-hidden="true">
-        <span style="background:var(--A)">A</span>
-        <span style="background:var(--B)">B</span>
-        <span style="background:var(--C)">C</span>
+        <span style="background:var(--A)">A</span><span style="background:var(--B)">B</span><span style="background:var(--C)">C</span>
       </div>
       <div>
-        <h1>Subte Musical 🇦🇷</h1>
-        <p class="subtitle">Escuchá el subte de Buenos Aires • Listen to the Buenos Aires Subte</p>
+        <h1>Subte Musical</h1>
+        <p class="subtitle"><span lang="en">Public transport timetables, played as music</span><span lang="es">Los horarios del transporte público, tocados como música</span></p>
       </div>
     </header>
 
     <nav>
-      <a href="index.html">🗺️ Mapa / Map</a>
-      <a href="#que-es">Qué es</a>
-      <a href="#como">Cómo funciona</a>
-      <a href="#datos">Datos</a>
-      <a href="#creditos">Créditos</a>
+      <a href="index.html">🗺️ <span lang="en">Back to the map</span><span lang="es">Volver al mapa</span></a>
+      <a href="#what"><span lang="en">What is it</span><span lang="es">Qué es</span></a>
+      <a href="#how"><span lang="en">How it works</span><span lang="es">Cómo funciona</span></a>
+      <a href="#data"><span lang="en">Data</span><span lang="es">Datos</span></a>
+      <a href="#credits"><span lang="en">Credits</span><span lang="es">Créditos</span></a>
+      <span class="spacer"></span>
+      <button id="lang" title="English / Español">ES</button>
+      <button id="theme" title="Light / dark mode">🌙</button>
     </nav>
 
-    <section id="que-es">
-      <h2>¿Qué es? <span class="status">en desarrollo</span></h2>
-      <p>Una pieza que convierte el horario del subte en música. Cada línea es una voz, y cada vez que un tren llega a una estación suena una nota. Un día entero de servicio se escucha en unos pocos minutos, con un mapa animado que muestra los trenes en vivo.</p>
-      <p class="en">This piece turns the Subte timetable into music. Each line is a voice, and a note sounds every time a train reaches a station. A full service day plays in a few minutes, alongside an animated map of the trains.</p>
-      <p>Funciona con cualquier ciudad: elegí Nueva York, Ciudad de México, Santiago o Berlín, o soltá el GTFS de tu ciudad.</p>
-      <p class="en">It works with any city: pick New York, Mexico City, Santiago or Berlin, or drop your own city's GTFS file.</p>
+    <section id="what">
+      <h2 lang="en">What is it?</h2><h2 lang="es">¿Qué es?</h2>
+      <p lang="en">This piece turns a metro timetable into music. Each line is a voice, and a note sounds every time a train reaches a station. A full service day plays in a few minutes, alongside an animated map of the trains.</p>
+      <p lang="es">Una pieza que convierte el horario del subte en música. Cada línea es una voz, y cada vez que un tren llega a una estación suena una nota. Un día entero de servicio se escucha en unos pocos minutos, con un mapa animado de los trenes.</p>
+      <p lang="en">It started with the Buenos Aires Subte and works with any city: pick New York, Mexico City, Santiago or Berlin, or drop your own city's GTFS file.</p>
+      <p lang="es">Empezó con el subte de Buenos Aires y funciona con cualquier ciudad: elegí Nueva York, Ciudad de México, Santiago o Berlín, o soltá el GTFS de tu ciudad.</p>
     </section>
 
-    <section id="como">
-      <h2>Cómo funciona · How it works</h2>
-      <p>Las letras de las líneas ya son nombres de notas. Usamos la notación alemana, en la que <b>B</b> es si♭ y <b>H</b> es si natural, así que ninguna línea queda sin nota.</p>
-      <p class="en">The line letters are already note names. We read them the German way, where B is B♭ and H is B natural, so every line gets a note.</p>
+    <section id="how">
+      <h2><span lang="en">How it works</span><span lang="es">Cómo funciona</span></h2>
+      <p lang="en">The Subte's line letters are already note names. We read them the German way, where B is B♭ and H is B natural, so every line gets a note.</p>
+      <p lang="es">Las letras de las líneas ya son nombres de notas. Usamos la notación alemana, en la que B es si♭ y H es si natural, así que ninguna línea queda sin nota.</p>
       <div class="lines">
-        <div class="line"><b style="background:var(--A)">A</b><span>La<small>A</small></span></div>
-        <div class="line"><b style="background:var(--B)">B</b><span>Si♭<small>B♭</small></span></div>
-        <div class="line"><b style="background:var(--C)">C</b><span>Do<small>C</small></span></div>
-        <div class="line"><b style="background:var(--D)">D</b><span>Re<small>D</small></span></div>
-        <div class="line"><b style="background:var(--E)">E</b><span>Mi<small>E</small></span></div>
-        <div class="line"><b style="background:var(--H);color:#000">H</b><span>Si<small>B natural</small></span></div>
-        <div class="line"><b style="background:var(--P);color:#000">P</b><span>Premetro<small>percusión · percussion</small></span></div>
+        <div class="line"><b style="background:var(--A)">A</b><span>A<small lang="en">A</small><small lang="es">La</small></span></div>
+        <div class="line"><b style="background:var(--B)">B</b><span>B♭<small lang="en">B flat</small><small lang="es">Si♭</small></span></div>
+        <div class="line"><b style="background:var(--C)">C</b><span>C<small lang="en">C</small><small lang="es">Do</small></span></div>
+        <div class="line"><b style="background:var(--D)">D</b><span>D<small lang="en">D</small><small lang="es">Re</small></span></div>
+        <div class="line"><b style="background:var(--E)">E</b><span>E<small lang="en">E</small><small lang="es">Mi</small></span></div>
+        <div class="line"><b style="background:var(--H);color:#000">H</b><span>B<small lang="en">B natural</small><small lang="es">Si</small></span></div>
+        <div class="line"><b style="background:var(--P);color:#000">P</b><span>Premetro<small lang="en">percussion</small><small lang="es">percusión</small></span></div>
       </div>
-      <h3>Reglas · Rules</h3>
-      <ul>
-        <li><b>Estación → altura.</b> Avanzar por la línea sube por la escala. <span class="en">Moving along the line climbs the scale.</span></li>
-        <li><b>Sentido → paneo.</b> Un sentido suena a la izquierda y el otro a la derecha. <span class="en">One direction plays on the left, the other on the right.</span></li>
-        <li><b>Combinaciones → acentos.</b> Si dos líneas llegan juntas a una estación de combinación, suena un acorde. <span class="en">Two lines arriving together at an interchange make a chord.</span></li>
+      <h3><span lang="en">Rules</span><span lang="es">Reglas</span></h3>
+      <ul lang="en">
+        <li><b>Station → pitch.</b> Moving along the line climbs the scale; the same station always plays the same note.</li>
+        <li><b>Line → instrument.</b> Each line has its own voice and its own place in the stereo field.</li>
+        <li><b>Terminals → accents.</b> Trains starting or ending their trip play a little louder.</li>
       </ul>
-      <h3>Lo que podés tocar · What you can play with</h3>
-      <ul>
-        <li>BPM y velocidad del día <span class="en">· BPM and how fast the day goes by</span></li>
-        <li>Frecuencia de cada línea (más o menos trenes) <span class="en">· how often each line runs</span></li>
-        <li>Silenciar o aislar líneas, elegir día hábil / sábado / domingo <span class="en">· mute or solo lines, pick weekday / Saturday / Sunday</span></li>
-        <li>Elegir nota e instrumento para cada línea <span class="en">· pick a note and instrument for each line</span></li>
-        <li><i>Próximamente:</i> exportar a MIDI <span class="en">· coming soon: export to MIDI</span></li>
+      <ul lang="es">
+        <li><b>Estación → altura.</b> Avanzar por la línea sube por la escala; la misma estación siempre suena igual.</li>
+        <li><b>Línea → instrumento.</b> Cada línea tiene su voz y su lugar en el estéreo.</li>
+        <li><b>Terminales → acentos.</b> Los trenes que empiezan o terminan su viaje suenan más fuerte.</li>
+      </ul>
+      <h3><span lang="en">What you can play with</span><span lang="es">Lo que podés tocar</span></h3>
+      <ul lang="en">
+        <li>BPM, speed, scale and melody range</li>
+        <li>A note and an instrument for each line, and sound on/off</li>
+        <li>How many trains run on each line: click a line to launch one more</li>
+        <li>Save your setup as a .maki file, or share it as a link</li>
+      </ul>
+      <ul lang="es">
+        <li>BPM, velocidad, escala y rango de la melodía</li>
+        <li>Nota e instrumento para cada línea, y sonido on/off</li>
+        <li>Cuántos trenes corren en cada línea: hacé clic en una línea para lanzar uno más</li>
+        <li>Guardá tu configuración como archivo .maki, o compartila con un link</li>
       </ul>
     </section>
 
-    <section id="datos">
-      <h2>Datos · Data</h2>
-      <p>Usamos el GTFS estático del subte, publicado como datos abiertos por la Ciudad de Buenos Aires (versión 2014–2019). El feed indica cada cuántos minutos pasa un tren en cada franja horaria, y a partir de eso generamos cada viaje. Es el horario <i>programado</i>, no la posición real de los trenes.</p>
-      <p class="en">We use the Subte static GTFS feed, published as open data by the City of Buenos Aires (2014–2019 version). The feed gives how often trains run in each time window, and we generate every trip from that. It is the <i>scheduled</i> timetable, not live train positions.</p>
+    <section id="data">
+      <h2><span lang="en">Data</span><span lang="es">Datos</span></h2>
+      <p lang="en">Everything comes from GTFS, the open format transit agencies use to publish timetables. For Buenos Aires we use the City's open-data Subte feed (2014–2019 version). It gives how often trains run in each time window, and we generate every trip from that. It is the <i>scheduled</i> timetable, not live train positions. Your own GTFS files never leave your browser.</p>
+      <p lang="es">Todo sale de GTFS, el formato abierto con el que las empresas de transporte publican sus horarios. Para Buenos Aires usamos el GTFS del subte de los datos abiertos de la Ciudad (versión 2014–2019), que indica cada cuántos minutos pasa un tren en cada franja horaria; a partir de eso generamos cada viaje. Es el horario <i>programado</i>, no la posición real de los trenes. Tus propios archivos GTFS nunca salen de tu navegador.</p>
     </section>
 
-    <section id="creditos">
-      <h2>Agradecimientos · Acknowledgements</h2>
-      <p>Esta idea no es nueva. Otros llegaron antes, y este proyecto se apoya en su trabajo.</p>
-      <p class="en">This idea isn't new. Others got there first, and this project builds on their work.</p>
+    <section id="credits">
+      <h2><span lang="en">Acknowledgements</span><span lang="es">Agradecimientos</span></h2>
+      <p lang="en">This idea isn't new. Others got there first, and this project builds on their work.</p>
+      <p lang="es">Esta idea no es nueva. Otros llegaron antes, y este proyecto se apoya en su trabajo.</p>
 
       <div class="credit">
         <b><a href="http://mta.me/" target="_blank" rel="noopener">Conductor (mta.me)</a></b> by Alexander Chen, 2011
-        <div class="meta">El mapa del subte de Nueva York como instrumento de cuerdas, movido por el horario. El precedente original. · The New York subway map as a string instrument, driven by the timetable. The original precedent.</div>
+        <div class="meta"><span lang="en">The New York subway map as a string instrument, driven by the timetable. The original precedent.</span><span lang="es">El mapa del subte de Nueva York como instrumento de cuerdas, movido por el horario. El precedente original.</span></div>
       </div>
-
       <div class="credit">
         <b><a href="https://amba-trenes-sonoros.vercel.app" target="_blank" rel="noopener">AMBA Trenes Sonoros</a></b> by Juan Torchia
-        <div class="meta">Los trenes metropolitanos de Buenos Aires tocando música a partir de su GTFS, con Tone.js y escala pentatónica. El antecedente más cercano en Buenos Aires. · Buenos Aires commuter trains playing music from their GTFS, using Tone.js and a pentatonic scale. The closest precedent in Buenos Aires.
-          · <a href="https://github.com/JuanTorchia/amba-trenes-sonoros" target="_blank" rel="noopener">código</a>
-          · <a href="https://dev.to/jtorchia/open-data-and-creativity-how-i-made-buenos-aires-trains-play-music-obg" target="_blank" rel="noopener">artículo</a></div>
+        <div class="meta"><span lang="en">Buenos Aires commuter trains playing music from their GTFS, using Tone.js and a pentatonic scale. The closest precedent in Buenos Aires.</span><span lang="es">Los trenes metropolitanos de Buenos Aires tocando música a partir de su GTFS, con Tone.js y escala pentatónica. El antecedente más cercano en Buenos Aires.</span>
+          · <a href="https://github.com/JuanTorchia/amba-trenes-sonoros" target="_blank" rel="noopener">code</a>
+          · <a href="https://dev.to/jtorchia/open-data-and-creativity-how-i-made-buenos-aires-trains-play-music-obg" target="_blank" rel="noopener">article</a></div>
       </div>
-
       <div class="credit">
         <b><a href="https://bondi-sonoro.vercel.app" target="_blank" rel="noopener">Bondi Sonoro</a></b> by Juan Torchia
-        <div class="meta">Los colectivos de la Ciudad en tiempo real, tocando las cuerdas de las rutas que cruzan. · The city's buses in real time, plucking the routes they cross.
-          · <a href="https://github.com/JuanTorchia/bondi-sonoro" target="_blank" rel="noopener">código</a>
-          · <a href="https://dev.to/jtorchia/bondi-sonoro-a-build-log-of-real-data-generative-music-and-the-mtame-mechanic-7g9" target="_blank" rel="noopener">artículo</a></div>
+        <div class="meta"><span lang="en">The city's buses in real time, plucking the routes they cross.</span><span lang="es">Los colectivos de la Ciudad en tiempo real, tocando las cuerdas de las rutas que cruzan.</span>
+          · <a href="https://github.com/JuanTorchia/bondi-sonoro" target="_blank" rel="noopener">code</a>
+          · <a href="https://dev.to/jtorchia/bondi-sonoro-a-build-log-of-real-data-generative-music-and-the-mtame-mechanic-7g9" target="_blank" rel="noopener">article</a></div>
       </div>
 
-      <h3>¿Qué agrega este proyecto? · What this one adds</h3>
-      <ul>
-        <li>El <b>subte</b> específicamente, con las letras de las líneas como notas. <span class="en">The Subte specifically, with the line letters as notes.</span></li>
-        <li>BPM, notas e instrumentos <b>editables</b> por quien escucha. <span class="en">BPM, notes and instruments the listener can edit.</span></li>
-        <li>Cualquier ciudad: soltá un GTFS y sonará. <span class="en">Any city: drop a GTFS file and it plays.</span></li>
+      <h3><span lang="en">What this one adds</span><span lang="es">¿Qué agrega este proyecto?</span></h3>
+      <ul lang="en">
+        <li>The Subte itself, with the line letters as notes.</li>
+        <li>Notes, instruments, BPM and train frequency the listener can edit, plus setups you can save and share.</li>
+        <li>Any city: drop a GTFS file and it plays.</li>
+      </ul>
+      <ul lang="es">
+        <li>El subte, con las letras de las líneas como notas.</li>
+        <li>Notas, instrumentos, BPM y frecuencia de trenes editables, y configuraciones que se guardan y comparten.</li>
+        <li>Cualquier ciudad: soltá un GTFS y sonará.</li>
       </ul>
 
-      <h3>Hecho con · Built with</h3>
-      <p><a href="https://p5js.org" target="_blank" rel="noopener">p5.js</a> · <a href="https://tonejs.github.io" target="_blank" rel="noopener">Tone.js</a> · GTFS — <a href="https://data.buenosaires.gob.ar" target="_blank" rel="noopener">Buenos Aires Data</a></p>
+      <h3><span lang="en">Built with</span><span lang="es">Hecho con</span></h3>
+      <p><a href="https://p5js.org" target="_blank" rel="noopener">p5.js</a> · <a href="https://tonejs.github.io" target="_blank" rel="noopener">Tone.js</a> · <a href="https://stuk.github.io/jszip/" target="_blank" rel="noopener">JSZip</a> · GTFS: <a href="https://data.buenosaires.gob.ar" target="_blank" rel="noopener">Buenos Aires Data</a></p>
     </section>
 
     <footer>
-      Hecho por <a href="https://github.com/MakiJota" target="_blank" rel="noopener">MakiJota</a> · <a href="index.html">volver al mapa / back to the map</a>
+      <span lang="en">Made by</span><span lang="es">Hecho por</span> <a href="https://nodalworks.se/" target="_blank" rel="noopener">Jonathan Cohen</a> ·
+      <a href="index.html"><span lang="en">back to the map</span><span lang="es">volver al mapa</span></a>
     </footer>
   </div>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var themeBtn = document.getElementById('theme'), langBtn = document.getElementById('lang');
+      function paint() {
+        themeBtn.textContent = root.dataset.theme === 'dark' ? '☀️' : '🌙';
+        langBtn.textContent = root.dataset.lang === 'es' ? 'EN' : 'ES';
+      }
+      themeBtn.addEventListener('click', function () {
+        root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+        paint();
+      });
+      langBtn.addEventListener('click', function () {
+        root.dataset.lang = root.dataset.lang === 'es' ? 'en' : 'es';
+        root.lang = root.dataset.lang;
+        try { localStorage.setItem('lang', root.dataset.lang); } catch (e) {}
+        paint();
+      });
+      paint();
+    })();
+  </script>
   <script data-name="BMC-Widget" data-cfasync="false" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js"
     data-id="RxCUuV5" data-description="Support me on Buy me a coffee!" data-message="Thanks for the coffee! :)"
     data-color="#26B0A1" data-position="Right" data-x_margin="5" data-y_margin="5"></script>

@@ -139,7 +139,6 @@ function draw() {
   drawTrains(t, px, dark);
   pop();
   drawClock(t, dark);
-  if (App.status) drawMessage(App.status);
 }
 
 function drawTrains(t, px, dark) {
@@ -153,10 +152,13 @@ function drawTrains(t, px, dark) {
   while (lo < hi) { const m = (lo + hi) >> 1; if (inst[m].s < from) lo = m + 1; else hi = m; }
   stroke(dark ? 0 : 255);
   strokeWeight(1 * px);
+  const counts = new Array(feed.lines.length).fill(0);
+  App.activeCounts = counts;   // the panel shows these as "trains running now"
   for (let k = lo; k < inst.length && inst[k].s <= t; k++) {
     const it = inst[k];
     if (it.e < t) continue;
     const p = it.p;
+    counts[p.line]++;
     const dt = t - it.s;
     const offs = p.offsets;
     let a = 0, b = offs.length - 1;
@@ -229,8 +231,37 @@ function mouseWheel(e) {
   lastInteract = millis();
   return false;
 }
-function mousePressed(e) { if (onMap(e)) { dragging = true; lastX = mouseX; lastY = mouseY; } }
-function mouseReleased() { dragging = false; }
+let pressX = 0, pressY = 0;
+function mousePressed(e) { if (onMap(e)) { dragging = true; lastX = pressX = mouseX; lastY = pressY = mouseY; } }
+function mouseReleased() {
+  // a click (not a drag) on a line launches one more train on it
+  if (dragging && world && Math.hypot(mouseX - pressX, mouseY - pressY) < 5) {
+    const li = lineAt(mouseX, mouseY);
+    if (li >= 0) { App.changeTrains(li, +1); Music.preview(li); }
+  }
+  dragging = false;
+}
+
+// nearest line within 10 px of a screen point, or -1
+function lineAt(sx, sy) {
+  const wx = (sx - view.ox) / view.s, wy = (sy - view.oy) / view.s;
+  let best = -1, bestD = 10 / view.s;
+  world.lines.forEach((pls, li) => {
+    for (const pl of pls) for (let k = 1; k < pl.length; k++) {
+      const [ax, ay] = pl[k - 1], [bx, by] = pl[k];
+      const dx = bx - ax, dy = by - ay;
+      const L = dx * dx + dy * dy;
+      const u = L ? Math.max(0, Math.min(1, ((wx - ax) * dx + (wy - ay) * dy) / L)) : 0;
+      const d = Math.hypot(wx - ax - u * dx, wy - ay - u * dy);
+      if (d < bestD) { bestD = d; best = li; }
+    }
+  });
+  return best;
+}
+function mouseMoved(e) {
+  if (!world || !onMap(e)) return;
+  document.querySelector('#map canvas').style.cursor = lineAt(mouseX, mouseY) >= 0 ? 'pointer' : 'grab';
+}
 function mouseDragged() {
   if (!dragging) return;
   view.ox += mouseX - lastX;

@@ -7,7 +7,9 @@ Every train that reaches a station plays a note. Each line is a voice, and a ful
 - Pick a bundled city: Buenos Aires Subte, New York Subway, Ciudad de México Metro, Santiago Metro, or a Berlin-area bus sample.
 - **Or drop any GTFS `.zip`** (or its `.txt` files) on the page to hear your own city.
 - Set the BPM, the speed (simulated minutes per beat), the scale and the melody range.
-- For each line, choose a **note**, an **instrument**, **mute** or **solo**.
+- For each line, choose a **note**, an **instrument**, sound on/off, and **how many trains** run (`− n +`). **Click a line** on the map to launch one more train; *Reset trains* goes back to the timetable.
+- **Save & share:** *Copy link* puts the whole setup in the URL, and *Save .maki* / *Load .maki* store it as a small JSON file.
+- Light and dark mode. The credits page is in English and Spanish.
 - You can link straight to a city, e.g. `?city=NYC`, `?city=CDMX`, `?city=SDC`, `?city=BE`.
 
 ## How it works

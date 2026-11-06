@@ -355,44 +355,18 @@ const GTFS = (() => {
       ref.stations.forEach((s, k) => rank[li].set(s, n > 1 ? k / (n - 1) : 0));
     }
 
-    // --- events + instances ---
-    let total = 0;
-    for (const p of pats) total += p.starts.length * p.stations.length;
-    const LIMIT = 4e6;
-    if (total > LIMIT) throw new Error(`This selection has ${(total / 1e6).toFixed(1)}M stops — too many. Untick some transport types or lower "max lines".`);
-    const evT = new Float64Array(total), evLine = new Uint16Array(total), evPos = new Float32Array(total), evSt = new Uint32Array(total), evTerm = new Uint8Array(total);
-    const instances = [];
-    let e = 0, dayStart = Infinity, dayEnd = -Infinity, maxDur = 0;
+    // --- pitch position of every stop of every pattern ---
     for (const p of pats) {
       const n = p.stations.length;
-      const dur = p.offsets[n - 1];
-      if (dur > maxDur) maxDur = dur;
       const pos = new Float32Array(n);
       for (let k = 0; k < n; k++) {
         const r = rank[p.line].get(p.stations[k]);
         pos[k] = r !== undefined ? r : (p.dir ? 1 - k / (n - 1) : k / (n - 1));
       }
       p.pos = pos;
-      for (const s of p.starts) {
-        instances.push({ p, s, e: s + dur });
-        if (s < dayStart) dayStart = s;
-        if (s + dur > dayEnd) dayEnd = s + dur;
-        for (let k = 0; k < n; k++, e++) {
-          evT[e] = s + p.offsets[k]; evLine[e] = p.line; evPos[e] = pos[k]; evSt[e] = p.stations[k];
-          evTerm[e] = (k === 0 || k === n - 1) ? 1 : 0;
-        }
-      }
+      p.starts.sort((a, b) => a - b);
     }
     progress('Sorting notes…');
-    const order = new Uint32Array(total);
-    for (let i = 0; i < total; i++) order[i] = i;
-    order.sort((a, b) => evT[a] - evT[b]);
-    const events = { n: total, t: new Float64Array(total), line: new Uint16Array(total), pos: new Float32Array(total), station: new Uint32Array(total), term: new Uint8Array(total) };
-    for (let i = 0; i < total; i++) {
-      const j = order[i];
-      events.t[i] = evT[j]; events.line[i] = evLine[j]; events.pos[i] = evPos[j]; events.station[i] = evSt[j]; events.term[i] = evTerm[j];
-    }
-    instances.sort((a, b) => a.s - b.s);
 
     // --- geometry: shapes if present, else station sequences ---
     progress('Reading shapes…');
@@ -436,15 +410,103 @@ const GTFS = (() => {
     const bbox = { latMin: q(lats, trim), latMax: q(lats, 1 - trim), lonMin: q(lons, trim), lonMax: q(lons, 1 - trim) };
 
     progress('');
-    return {
-      date, lines, patterns: pats, instances, events, polylines,
+    const feed = {
+      date, lines, patterns: pats, polylines,
       stations: { lat: Float64Array.from(stLat), lon: Float64Array.from(stLon), name: stName },
-      dayStart: isFinite(dayStart) ? dayStart : 0, dayEnd: isFinite(dayEnd) ? dayEnd : 86400, maxDur, bbox,
-      stats: { lines: lines.length, droppedLines: dropped, trips: instances.length, notes: total, stopTimeRows: rowsSeen, usedAllServices: !active && date != null },
+      bbox,
+      stats: { lines: lines.length, droppedLines: dropped, stopTimeRows: rowsSeen, usedAllServices: !active && date != null },
     };
+    schedule(feed, null);
+    feed.dayStart = feed.span.start;   // the day's range stays fixed, whatever the frequencies
+    feed.dayEnd = feed.span.end;
+    return feed;
   }
 
-  return { urlSource, zipSource, filesSource, loadMeta, build, servicesFor, typeGroup, parseTime, GROUP_LABELS };
+  // Re-space a pattern's departures so the line runs `f` times as often (f=2: twice as many trains).
+  // Departures are interpolated inside each service run; long gaps (e.g. the night) are never filled.
+  // deps: departures of one line+direction, sorted [{s, p}]. Each new departure reuses the pattern
+  // (route + running times) of the nearest original one.
+  function warp(deps, f) {
+    if (f === 1) return deps;
+    if (f <= 0) return [];
+    const out = [];
+    const gaps = [];
+    for (let i = 1; i < deps.length; i++) gaps.push(deps[i].s - deps[i - 1].s);
+    gaps.sort((a, b) => a - b);
+    const median = gaps.length ? gaps[gaps.length >> 1] : 0;
+    const breakGap = Math.max(1800, median * 3);
+    const flush = (a, b) => { // deps[a..b] is one continuous run
+      const n = b - a + 1;
+      if (n === 1) { if (f >= 0.5) out.push(deps[a]); return; }
+      const total = (n - 1) * f;
+      for (let k = 0; k <= total + 1e-9; k++) {
+        const x = k / f;
+        const i = Math.min(n - 2, Math.floor(x));
+        const u = x - i;
+        const A = deps[a + i], B = deps[a + i + 1];
+        out.push({ s: A.s + (B.s - A.s) * u, p: u < 0.5 ? A.p : B.p });
+      }
+    };
+    let runStart = 0;
+    for (let i = 1; i <= deps.length; i++) {
+      if (i === deps.length || deps[i].s - deps[i - 1].s > breakGap) { flush(runStart, i - 1); runStart = i; }
+    }
+    return out;
+  }
+
+  // (Re)build train instances and the time-sorted note events. freq[line] = frequency factor (default 1).
+  function schedule(feed, freq) {
+    const pats = feed.patterns;
+    const groups = new Map();
+    for (const p of pats) {
+      const key = p.line + '|' + p.dir;
+      if (!groups.has(key)) groups.set(key, []);
+      const g = groups.get(key);
+      for (const s of p.starts) g.push({ s, p });
+    }
+    const deps = [];
+    for (const g of groups.values()) {
+      g.sort((a, b) => a.s - b.s);
+      const f = freq && freq[g[0].p.line] !== undefined ? freq[g[0].p.line] : 1;
+      for (const d of warp(g, f)) deps.push(d);
+    }
+    let total = 0;
+    for (const d of deps) total += d.p.stations.length;
+    if (total > 4e6) throw new Error(`This selection has ${(total / 1e6).toFixed(1)}M stops — too many. Untick some transport types or lower "max lines".`);
+    const evT = new Float64Array(total), evLine = new Uint16Array(total), evPos = new Float32Array(total), evSt = new Uint32Array(total), evTerm = new Uint8Array(total);
+    const instances = [];
+    let e = 0, start = Infinity, end = -Infinity, maxDur = 0;
+    for (const { s, p } of deps) {
+      const n = p.stations.length;
+      const dur = p.offsets[n - 1];
+      if (dur > maxDur) maxDur = dur;
+      instances.push({ p, s, e: s + dur });
+      if (s < start) start = s;
+      if (s + dur > end) end = s + dur;
+      for (let k = 0; k < n; k++, e++) {
+        evT[e] = s + p.offsets[k]; evLine[e] = p.line; evPos[e] = p.pos[k]; evSt[e] = p.stations[k];
+        evTerm[e] = (k === 0 || k === n - 1) ? 1 : 0;
+      }
+    }
+    const order = new Uint32Array(total);
+    for (let i = 0; i < total; i++) order[i] = i;
+    order.sort((a, b) => evT[a] - evT[b]);
+    const events = { n: total, t: new Float64Array(total), line: new Uint16Array(total), pos: new Float32Array(total), station: new Uint32Array(total), term: new Uint8Array(total) };
+    for (let i = 0; i < total; i++) {
+      const j = order[i];
+      events.t[i] = evT[j]; events.line[i] = evLine[j]; events.pos[i] = evPos[j]; events.station[i] = evSt[j]; events.term[i] = evTerm[j];
+    }
+    instances.sort((a, b) => a.s - b.s);
+    feed.events = events;
+    feed.instances = instances;
+    feed.maxDur = maxDur;
+    feed.span = { start: isFinite(start) ? start : 0, end: isFinite(end) ? end : 86400 };
+    feed.stats.trips = instances.length;
+    feed.stats.notes = total;
+    return feed;
+  }
+
+  return { urlSource, zipSource, filesSource, loadMeta, build, schedule, servicesFor, typeGroup, parseTime, GROUP_LABELS };
 })();
 
 if (typeof module !== 'undefined') module.exports = GTFS;
