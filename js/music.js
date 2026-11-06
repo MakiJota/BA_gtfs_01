@@ -28,7 +28,7 @@ const Music = (() => {
   };
 
   let feed = null, lineCfg = [];   // lineCfg[i] = {midi, instrument, mute, solo}
-  let voices = [];                 // per line: {inst, channel, kind}
+  const voices = new Map();        // 'L3' / 'S3' -> {inst, channel, kind}
   let master = null, ready = false, playing = false, repeatId = null;
   let simCursor = 0, evPtr = 0;
   let loop = null;                 // [start, end] in sim seconds: "play a moment"; null = the whole day
@@ -83,17 +83,24 @@ const Music = (() => {
     }
   }
 
-  function ensureVoice(i) {
-    const cfg = lineCfg[i];
-    let v = voices[i];
+  // one voice per line per tab ('L' = listen, 'S' = sample), created on first use
+  function ensureVoice(i, tab = 'L') {
+    const cfg = tab === 'S' ? sample.lines[i] : lineCfg[i];
+    const key = tab + i;
+    let v = voices.get(key);
     if (v && v.kind === cfg.instrument) return v;
     if (v) { v.inst.dispose(); v.channel.dispose(); }
-    const n = lineCfg.length;
+    const n = Math.max(lineCfg.length, sample.lines.length);
     const channel = new Tone.Channel({ volume: 0, pan: n > 1 ? -0.6 + 1.2 * (i / (n - 1)) : 0 }).connect(master);
     const inst = makeInstrument(cfg.instrument);
     inst.connect(channel);
-    v = voices[i] = { inst, channel, kind: cfg.instrument };
+    v = { inst, channel, kind: cfg.instrument };
+    voices.set(key, v);
     return v;
+  }
+  function disposeVoices() {
+    voices.forEach(v => { v.inst.dispose(); v.channel.dispose(); });
+    voices.clear();
   }
 
   async function init() {
@@ -108,8 +115,7 @@ const Music = (() => {
   }
 
   // ---------- scheduling ----------
-  function noteFor(i, pos) {
-    const cfg = lineCfg[i];
+  function noteFor(i, pos, cfg = lineCfg[i]) {
     const sc = SCALES[S.scale];
     const deg = S.range > 1 ? Math.round(pos * (S.range - 1)) : 0;
     return cfg.midi + sc[deg % sc.length] + 12 * Math.floor(deg / sc.length);
@@ -143,17 +149,105 @@ const Music = (() => {
     simCursor = to;
     const [lo, hi] = loop || [feed.dayStart, feed.dayEnd];
     if (simCursor >= hi || simCursor < lo) { simCursor = lo; evPtr = lowerBound(simCursor); }
-    Tone.Draw.schedule(() => {
-      const now = performance.now();
-      anchor = { sim: from, real: now, playing: true };
-      for (const [st, li] of hits) { flashes.push({ station: st, line: li, real: now }); lineLevel[li] = 1; }
-      if (flashes.length > 400) flashes.splice(0, flashes.length - 400);
-    }, time);
+    // the visual clock and the flashes are stamped with the wall-clock time this step sounds
+    const real = performance.now() + Math.max(0, time - Tone.context.currentTime) * 1000;
+    for (const [st, li] of hits) pushFlash(st, li, real);
+    Tone.Draw.schedule(() => { anchor = { sim: from, real: performance.now(), playing: true }; }, time);
+  }
+
+  // ---------- the sampler (tab 2) ----------
+  // Each line runs `n` trains from its first to its last station, one station per beat at the line's
+  // own BPM, then back to the start (one silent beat for the return). Every station reached = a note.
+  // Lines keep their own position (xRef at TRef), so a BPM change doesn't make trains jump.
+  const sample = { lines: [], playing: false, Tbase: 0, audioBase: 0, cursorT: 0, timer: null };
+  const ctxNow = () => Tone.context.currentTime;
+  function sampleT(audio = ctxNow()) { return sample.playing ? sample.Tbase + (audio - sample.audioBase) : sample.Tbase; }
+  function sampleX(L, T) { return L.xRef + (T - L.TRef) * L.bpm / 60; }
+
+  function setSampleLines(lines) {
+    sample.lines = lines.map(L => ({ xRef: 0, TRef: 0, ...L }));
+    sample.Tbase = 0; sample.cursorT = 0;
+  }
+  function updateSampleLine(i, patch) {
+    const L = sample.lines[i];
+    if (!L) return;
+    if ('bpm' in patch) { const T = sampleT(); L.xRef = sampleX(L, T); L.TRef = T; }
+    Object.assign(L, patch);
+  }
+  function sampleTick() {
+    const now = ctxNow();
+    const fromT = sample.cursorT, toT = sampleT(now + 0.15);   // schedule 150 ms ahead
+    if (toT <= fromT) return;
+    const hits = [];
+    sample.lines.forEach((L, i) => {
+      if (!L.on || !(L.n > 0) || L.S < 2 || !(L.bpm > 0)) return;
+      const per = L.S;                          // S stations + the return beat
+      for (let k = 0; k < L.n; k++) {
+        const off = k * per / L.n;
+        const x0 = sampleX(L, fromT) + off, x1 = sampleX(L, toT) + off;
+        for (let m = Math.floor(x0) + 1; m <= Math.floor(x1); m++) {
+          const idx = ((m % per) + per) % per;  // station index along the trip
+          const st = L.invert ? L.S - 1 - idx : idx;
+          const T = L.TRef + (m - off - L.xRef) * 60 / L.bpm;
+          const when = Math.max(now + 0.01, sample.audioBase + (T - sample.Tbase));
+          const v = ensureVoice(i, 'S');
+          const midi = noteFor(i, st / (L.S - 1), L);
+          const vel = (idx === 0 || idx === L.S - 1) ? 0.9 : 0.6;
+          v.inst.trigger(Tone.Frequency(midi + v.inst.shift, 'midi').toNote(), v.inst.dur, when, vel);
+          hits.push([L.stations[st], i, when]);
+        }
+      }
+    });
+    sample.cursorT = toT;
+    // flashes carry the wall-clock moment their note sounds; the map skips them until then.
+    // (Tone.Draw would drop them on a slow frame, e.g. a big network on a phone.)
+    const nowReal = performance.now();
+    for (const [station, line, when] of hits) pushFlash(station, line, nowReal + (when - now) * 1000);
+  }
+  function pushFlash(station, line, real) {
+    flashes.push({ station, line, real });
+    if (flashes.length > 600) flashes.splice(0, flashes.length - 600);
+  }
+  async function playSample() {
+    await init();
+    if (playing) pause();               // only one tab plays at a time
+    if (sample.playing) return;
+    const now = ctxNow();
+    sample.audioBase = now + 0.05;
+    sample.cursorT = sample.Tbase;
+    sample.playing = true;
+    sample.timer = setInterval(sampleTick, 25);
+    sampleTick();
+    emit();
+  }
+  function pauseSample() {
+    if (!sample.playing) return;
+    sample.Tbase = sampleT();
+    sample.playing = false;
+    clearInterval(sample.timer);
+    emit();
+  }
+  // where every sampler train is now, for the map: [{line, a, u}] (between stop a and a+1, fraction u)
+  function sampleTrains() {
+    const T = sampleT();
+    const out = [];
+    sample.lines.forEach((L, i) => {
+      if (!(L.n > 0) || L.S < 2) return;
+      for (let k = 0; k < L.n; k++) {
+        const x = sampleX(L, T) + k * L.S / L.n;
+        const m = ((x % L.S) + L.S) % L.S;
+        const a = Math.floor(m);
+        if (a >= L.S - 1) continue;           // on its way back to the start
+        out.push({ line: i, a, u: m - a, invert: L.invert, on: L.on });
+      }
+    });
+    return out;
   }
 
   async function play() {
     if (!feed) return;
     await init();
+    if (sample.playing) pauseSample();
     if (playing) return;
     if (repeatId === null) repeatId = Tone.Transport.scheduleRepeat(step, '16n');
     evPtr = lowerBound(simCursor);
@@ -184,8 +278,8 @@ const Music = (() => {
   function setFeed(f, cfgs) {
     const wasPlaying = playing;
     if (playing) pause();
-    voices.forEach(v => { if (v) { v.inst.dispose(); v.channel.dispose(); } });
-    voices = [];
+    pauseSample();
+    disposeVoices();
     feed = f;
     lineCfg = cfgs;
     lineLevel.length = 0;
@@ -204,10 +298,11 @@ const Music = (() => {
   function updateLine(i, patch) {
     Object.assign(lineCfg[i], patch);
   }
-  function preview(i) {
+  function preview(i, tab = 'L') {
     init().then(() => {
-      const v = ensureVoice(i);
-      v.inst.trigger(Tone.Frequency(lineCfg[i].midi + v.inst.shift, 'midi').toNote(), v.inst.dur, Tone.now() + 0.02, 0.8);
+      const v = ensureVoice(i, tab);
+      const cfg = tab === 'S' ? sample.lines[i] : lineCfg[i];
+      v.inst.trigger(Tone.Frequency(cfg.midi + v.inst.shift, 'midi').toNote(), v.inst.dur, Tone.now() + 0.02, 0.8);
     });
   }
   function onChange(fn) { listeners.push(fn); }
@@ -217,6 +312,8 @@ const Music = (() => {
     NOTE_NAMES, NOTE_LABELS, SCALES, INSTRUMENTS, settings: S,
     play, pause, seek, simNow, setFeed, set, updateLine, refresh, preview, onChange, setLoop,
     getLoop: () => loop,
+    setSampleLines, updateSampleLine, playSample, pauseSample, sampleTrains,
+    sampleLines: () => sample.lines, isSamplePlaying: () => sample.playing,
     isPlaying: () => playing, flashes, lineLevel, lineCfg: () => lineCfg,
   };
 })();

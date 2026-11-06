@@ -7,9 +7,10 @@ Every train that reaches a station plays a note. Each line is a voice, and a ful
 - Pick a bundled city: Buenos Aires Subte, New York Subway, Ciudad de México Metro, Santiago Metro, or a Berlin-area bus sample.
 - **Or drop any GTFS `.zip`** (or its `.txt` files) on the page to hear your own city.
 - Set the BPM, the speed (simulated minutes per beat), the scale and the melody range.
-- **Play the day** (the whole service day) or **Play a moment**, which loops a 10 min – 2 h window around the time you pick, to compare 7 am with 3 pm.
-- For each line, choose a **note**, an **instrument** and sound on/off. All lines start muted, so you build the music up.
-- **Trains per line** (`− n +`): a timetable line shows its average number of trains around the current time. Pressing ± (or clicking the line on the map) switches it to exactly *n* evenly spaced trains all day. *Reset trains* goes back to the timetable.
+- Two tabs:
+  - **🎧 Listen:** the real timetable. **Play the day**, or **Play a moment** (loops a 10 min – 2 h window around the time you pick, to compare 7 am with 3 pm). For each line, choose the note, instrument and sound on/off. Nothing here changes the trains.
+  - **🎛️ Sample:** every line becomes a loop. For each line, set **how many trains** run from the first to the last station, its own **BPM** (one station per beat, so different BPMs make polyrhythms), **⇄ invert** the direction, and the note, instrument and on/off. Click a line on the map to launch one more train.
+- All lines start muted, so you build the music up.
 - Trains travel along the real track shapes. Data gaps are skipped, never estimated: a stop with no time or no coordinates plays no note.
 - **Save & share:** *Copy link* puts the whole setup in the URL, and *Save .maki* / *Load .maki* store it as a small JSON file.
 - Light and dark mode. The credits page is in English and Spanish.

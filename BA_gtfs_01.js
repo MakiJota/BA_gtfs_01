@@ -169,12 +169,10 @@ function renderLayer() {
     g.endShape(CLOSE);
   }
   // lines
-  const cfgs = Music.lineCfg();
-  const anySolo = cfgs.some(c => c.solo);
   g.noFill();
   g.strokeJoin(ROUND);
   App.feed.lines.forEach((L, i) => {
-    const off = cfgs[i] && (cfgs[i].mute || (anySolo && !cfgs[i].solo));
+    const off = lineIsOff(i);
     const c = color(L.displayColor);
     c.setAlpha(off ? 110 : 235);
     g.stroke(c);
@@ -231,11 +229,34 @@ function draw() {
   drawClock(t, dark);
 }
 
+// is line i silent in the current tab?
+function lineIsOff(i) {
+  if (App.tab === 'sample') { const s = Music.sampleLines()[i]; return !s || !s.on; }
+  const c = Music.lineCfg()[i];
+  return !c || c.mute;
+}
+
+// tab 2: the sampler's looping trains
+function drawSampleTrains(px, dark) {
+  stroke(dark ? 0 : 255);
+  strokeWeight(1 * px);
+  for (const tr of Music.sampleTrains()) {
+    const p = App.routes[tr.line];
+    if (!p) continue;
+    const S = p.stations.length;
+    // normal: stop a -> a+1 ; inverted: the same trip read backwards
+    const [x, y] = tr.invert ? trainXY(p, S - 2 - tr.a, S - 1 - tr.a, 1 - tr.u) : trainXY(p, tr.a, tr.a + 1, tr.u);
+    const c = color(App.feed.lines[tr.line].displayColor);
+    if (!tr.on) c.setAlpha(110);
+    fill(c);
+    circle(x, y, (tr.on ? 10 : 7) * px);
+  }
+}
+
 function drawTrains(t, px, dark) {
+  if (App.tab === 'sample') return drawSampleTrains(px, dark);
   const feed = App.feed;
   const inst = feed.instances;
-  const cfgs = Music.lineCfg();
-  const anySolo = cfgs.some(c => c.solo);
   // first instance that could still be running: start >= t - maxDur
   let lo = 0, hi = inst.length;
   const from = t - feed.maxDur;
@@ -256,7 +277,7 @@ function drawTrains(t, px, dark) {
     const span = offs[b] - offs[a];
     const u = span > 0 ? Math.min(1, Math.max(0, (dt - offs[a]) / span)) : 0;
     const [x, y] = trainXY(p, a, b, u);
-    const off = cfgs[p.line] && (cfgs[p.line].mute || (anySolo && !cfgs[p.line].solo));
+    const off = lineIsOff(p.line);
     const c = color(feed.lines[p.line].displayColor);
     if (off) c.setAlpha(110);   // muted lines keep their colour, just paler
     fill(c);
@@ -289,7 +310,7 @@ function drawClock(t, dark) {
   textAlign(LEFT, TOP);
   textSize(34);
   textStyle(BOLD);
-  text(fmtClock(t), 18, 14);
+  text(App.tab === 'sample' ? 'Sample' : fmtClock(t), 18, 14);
   textStyle(NORMAL);
   textSize(13);
   fill(dark ? 170 : 90);
@@ -328,7 +349,7 @@ function mouseReleased() {
   // a click (not a drag) on a line launches one more train on it
   if (dragging && world && Math.hypot(mouseX - pressX, mouseY - pressY) < 5) {
     const li = lineAt(mouseX, mouseY);
-    if (li >= 0) { App.changeTrains(li, +1); Music.preview(li); }
+    if (li >= 0) App.clickLine(li);
   }
   dragging = false;
 }

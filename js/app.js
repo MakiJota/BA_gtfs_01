@@ -1,4 +1,4 @@
-// App glue: city list, GTFS drop, left panel controls, per-line mapping.
+// App glue: city list, GTFS drop, the two tabs (Listen / Sample), save & share.
 const CITIES = [
   { id: 'BA', name: 'Buenos Aires · Subte', gtfs: 'assets/BA/GTFS/', boundary: 'assets/BA/limit.geojson', colors: 'assets/BA/config.json',
     lines: { 'PM-C': { instrument: 'drum' }, 'PM-S': { instrument: 'hat' } } },
@@ -14,12 +14,18 @@ const INST_BY_GROUP = {
   metro: ['marimba', 'pluck', 'bell', 'chip', 'organ'], rail: ['organ', 'marimba', 'pluck', 'bell'],
   tram: ['bell', 'pluck', 'marimba'], ferry: ['pad'], bus: ['chip', 'marimba'], cable: ['hat'], other: ['marimba'],
 };
+const SAMPLE_DEFAULT = { n: 2, invert: false };
 
 const App = {
   feed: null, meta: null, boundary: null, city: null, status: '', title: '', redrawLines: false,
-  mode: 'day',   // 'day' = play the whole day; 'moment' = loop a window around the chosen time
-  togglePlay() { Music.isPlaying() ? Music.pause() : startMode(App.mode); },
-  changeTrains: (i, d) => changeTrains(i, d),
+  tab: 'listen',   // 'listen' = the real timetable; 'sample' = every line is a loop you design
+  mode: 'day',     // listen tab: 'day' = whole day; 'moment' = loop a window around the chosen time
+  routes: [],      // per line: the pattern the sampler runs on
+  togglePlay() {
+    if (App.tab === 'sample') Music.isSamplePlaying() ? Music.pauseSample() : startSample();
+    else Music.isPlaying() ? Music.pause() : startMode(App.mode);
+  },
+  clickLine: (i) => clickLine(i),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -71,6 +77,7 @@ function fail(e) {
 
 async function openFeed(source, city, boundary) {
   Music.pause();
+  Music.pauseSample();
   App.feed = null;
   App.city = city;
   App.boundary = boundary;
@@ -103,8 +110,8 @@ async function rebuild() {
   const groups = new Set([...document.querySelectorAll('#types input:checked')].map(i => i.value));
   if (!groups.size) { setStatus('Tick at least one transport type'); return; }
   const dayVal = $('day').value;
-  const wasPlaying = Music.isPlaying();
   Music.pause();
+  Music.pauseSample();
   try {
     const feed = await GTFS.build(App.meta, {
       date: dayVal ? parseInt(dayVal, 10) : null,
@@ -113,25 +120,51 @@ async function rebuild() {
     }, setStatus);
     const cm = App.city.colorMap || {};
     feed.lines.forEach((L, i) => { L.displayColor = cm[L.name] || L.color || PALETTE[i % PALETTE.length]; });
-    const cfgs = feed.lines.map((L, i) => defaultLineCfg(L, i));
     const P = App.pending;
     App.pending = null;
-    if (P && P.lines) feed.lines.forEach((L, i) => {
-      const s = P.lines[L.name];
+
+    // --- tab 1: listen ---
+    const cfgs = feed.lines.map((L, i) => defaultLineCfg(L, i));
+    const PL = P && P.lines;
+    if (PL) feed.lines.forEach((L, i) => {
+      const s = PL[L.name];
       if (!s) return;
       const midi = parseNote(s.note);
       if (midi !== null) cfgs[i].midi = midi;
       if (s.instrument && Music.INSTRUMENTS[s.instrument]) cfgs[i].instrument = s.instrument;
       cfgs[i].mute = s.mute !== undefined ? !!s.mute : false;
-      if (Number.isInteger(s.fixedTrains) && s.fixedTrains >= 0) cfgs[i].fixed = s.fixedTrains;
     });
-    if (cfgs.some(c => c.fixed != null)) GTFS.schedule(feed, cfgs.map(c => c.fixed));
     App.feed = feed;
     App.title = App.city.name;
-    App.activeCounts = [];
     Music.setFeed(feed, cfgs);
     if (P && typeof P.time === 'number') Music.seek(Math.max(feed.dayStart, Math.min(feed.dayEnd, P.time)));
+
+    // --- tab 2: sample — each line runs on its longest route ---
+    App.routes = feed.lines.map((L, i) => {
+      let best = null;
+      for (const p of feed.patterns) if (p.line === i && (!best || p.stations.length > best.stations.length || (p.stations.length === best.stations.length && p.dir < best.dir))) best = p;
+      return best;
+    });
+    const sampleBpm = parseInt($('sample-bpm').value, 10) || 90;
+    const PS = P && P.sample && P.sample.lines;
+    Music.setSampleLines(feed.lines.map((L, i) => {
+      const r = App.routes[i];
+      const base = { midi: cfgs[i].midi, instrument: cfgs[i].instrument, on: false, n: SAMPLE_DEFAULT.n, bpm: sampleBpm, invert: SAMPLE_DEFAULT.invert, S: r ? r.stations.length : 0, stations: r ? [...r.stations] : [] };
+      const s = PS && PS[L.name];
+      if (s) {
+        const midi = parseNote(s.note);
+        if (midi !== null) base.midi = midi;
+        if (s.instrument && Music.INSTRUMENTS[s.instrument]) base.instrument = s.instrument;
+        base.on = !!s.on;
+        if (Number.isInteger(s.trains) && s.trains >= 0) base.n = s.trains;
+        if (s.bpm > 0) base.bpm = s.bpm;
+        base.invert = !!s.invert;
+      }
+      return base;
+    }));
+
     renderLines();
+    renderSampleLines();
     const sc = $('scrub');
     sc.min = Math.floor(feed.dayStart / 60);
     sc.max = Math.ceil(feed.dayEnd / 60);
@@ -139,11 +172,11 @@ async function rebuild() {
     if (P && (P.mode === 'day' || P.mode === 'moment')) App.mode = P.mode;
     if (P && P.window) $('window').value = String(P.window);
     if (App.mode === 'moment') applyLoop(false); else Music.setLoop(null);
+    if (P && (P.tab === 'listen' || P.tab === 'sample')) setTab(P.tab); else setTab(App.tab);
     paintModes();
     showStats();
     setStatus(feed.events.n ? (P ? `Loaded shared setup${P.title ? ` “${P.title}”` : ''} — press Play` : '') : 'No trains found for this selection');
     dayLen();
-    if (wasPlaying) Music.play();
   } catch (e) { fail(e); }
 }
 
@@ -155,117 +188,160 @@ function defaultLineCfg(L, i) {
   else midi = 48 + PENTA[i % 5] + 12 * (Math.floor(i / 5) % 3);
   const pool = INST_BY_GROUP[L.group] || INST_BY_GROUP.other;
   // every line starts muted: you switch on the voices you want to hear
-  const cfg = { midi, instrument: pool[i % pool.length], mute: true, solo: false, fixed: null };
+  const cfg = { midi, instrument: pool[i % pool.length], mute: true, solo: false };
   const ov = App.city.lines && App.city.lines[L.name];
   return ov ? { ...cfg, ...ov } : cfg;
 }
 
-// ---------- lines list ----------
+// ---------- shared row parts ----------
+const SPEAKER_ON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+const SPEAKER_OFF = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
+// swatch | note | octave | instrument | speaker — the same in both tabs
+function soundRow(L, cfg, { onNote, onInst, onSwatch, isOn, onToggle, title }) {
+  const row = document.createElement('div');
+  row.className = 'line-row listen';
+  row.innerHTML = `
+    <button class="swatch" title="${esc(title)}" style="background:${L.displayColor};color:${contrast(L.displayColor)}">${esc(short(L.name))}</button>
+    <select class="note" title="Note">${Music.NOTE_LABELS.map((n, k) => `<option value="${k}">${n}</option>`).join('')}</select>
+    <select class="oct" title="Octave">${[1, 2, 3, 4, 5, 6].map(o => `<option>${o}</option>`).join('')}</select>
+    <select class="inst" title="Instrument">${Object.entries(Music.INSTRUMENTS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+    <button class="spk" aria-label="Sound on/off"></button>`;
+  const note = row.querySelector('.note'), oct = row.querySelector('.oct'), inst = row.querySelector('.inst');
+  note.value = cfg.midi % 12;
+  oct.value = Math.floor(cfg.midi / 12) - 1;
+  inst.value = cfg.instrument;
+  const setMidi = () => onNote((parseInt(oct.value, 10) + 1) * 12 + parseInt(note.value, 10));
+  note.addEventListener('change', setMidi);
+  oct.addEventListener('change', setMidi);
+  inst.addEventListener('change', () => onInst(inst.value));
+  row.querySelector('.swatch').addEventListener('click', onSwatch);
+  const spk = row.querySelector('.spk');
+  row.paint = () => {
+    const on = isOn();
+    spk.innerHTML = on ? SPEAKER_ON : SPEAKER_OFF;
+    spk.classList.toggle('off', !on);
+    spk.title = on ? 'Sound on — click to mute' : 'Sound off — click to turn on';
+  };
+  row.paint();
+  spk.addEventListener('click', () => { onToggle(); row.paint(); App.redrawLines = true; });
+  return row;
+}
+
+// ---------- tab 1: listen ----------
 function renderLines() {
   const list = $('lines');
   list.innerHTML = '';
   const cfgs = Music.lineCfg();
   App.feed.lines.forEach((L, i) => {
-    const cfg = cfgs[i];
-    const row = document.createElement('div');
-    row.className = 'line-row';
-    const textCol = contrast(L.displayColor);
-    row.innerHTML = `
-      <button class="swatch" title="${esc(L.long || L.name)} — click to launch a train" style="background:${L.displayColor};color:${textCol}">${esc(short(L.name))}</button>
-      <select class="note" title="Note">${Music.NOTE_LABELS.map((n, k) => `<option value="${k}">${n}</option>`).join('')}</select>
-      <select class="oct" title="Octave">${[1, 2, 3, 4, 5, 6].map(o => `<option>${o}</option>`).join('')}</select>
-      <select class="inst" title="Instrument">${Object.entries(Music.INSTRUMENTS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
-      <span class="trains" title="Trains running on this line right now">
-        <button class="step minus" aria-label="One train less">−</button><b class="count">–</b><button class="step plus" aria-label="One train more">+</button>
-      </span>
-      <button class="spk" aria-label="Sound on/off"></button>`;
-    const note = row.querySelector('.note'), oct = row.querySelector('.oct'), inst = row.querySelector('.inst');
-    note.value = cfg.midi % 12;
-    oct.value = Math.floor(cfg.midi / 12) - 1;
-    inst.value = cfg.instrument;
-    const setMidi = () => { Music.updateLine(i, { midi: (parseInt(oct.value, 10) + 1) * 12 + parseInt(note.value, 10) }); Music.preview(i); };
-    note.addEventListener('change', setMidi);
-    oct.addEventListener('change', setMidi);
-    inst.addEventListener('change', () => { Music.updateLine(i, { instrument: inst.value }); Music.preview(i); });
-    row.querySelector('.swatch').addEventListener('click', () => { changeTrains(i, +1); Music.preview(i); });
-    row.querySelector('.plus').addEventListener('click', () => changeTrains(i, +1));
-    row.querySelector('.minus').addEventListener('click', () => changeTrains(i, -1));
-    const spk = row.querySelector('.spk');
-    const paint = () => { spk.innerHTML = cfgs[i].mute ? SPEAKER_OFF : SPEAKER_ON; spk.classList.toggle('off', cfgs[i].mute); spk.title = cfgs[i].mute ? 'Sound off — click to turn on' : 'Sound on — click to mute'; };
-    paint();
-    spk.addEventListener('click', () => { Music.updateLine(i, { mute: !cfgs[i].mute, solo: false }); paint(); App.redrawLines = true; });
+    const row = soundRow(L, cfgs[i], {
+      title: `${L.long || L.name} — click to hear`,
+      onNote: m => { Music.updateLine(i, { midi: m }); Music.preview(i); },
+      onInst: v => { Music.updateLine(i, { instrument: v }); Music.preview(i); },
+      onSwatch: () => Music.preview(i),
+      isOn: () => !cfgs[i].mute,
+      onToggle: () => Music.updateLine(i, { mute: !cfgs[i].mute, solo: false }),
+    });
     list.appendChild(row);
   });
-  updateCounts();
+}
+function setAllMute(m) {
+  Music.lineCfg().forEach((c, i) => Music.updateLine(i, { mute: m, solo: false }));
+  renderLines();
+  App.redrawLines = true;
 }
 
-const SPEAKER_ON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-const SPEAKER_OFF = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-
-// ---------- trains per line ----------
-// Timetable lines show the average number of trains running over the next/last 15 minutes
-// (a steady number, not one that flickers as trains come and go).
-// Touching + / − / the line switches it to a FIXED number of trains: exactly N run all day.
-const SMOOTH_WINDOW = 1800;
-function smoothedCounts() {
-  const f = App.feed;
-  const counts = new Array(f.lines.length).fill(0);
-  const t = Music.simNow(), a = t - SMOOTH_WINDOW / 2, b = t + SMOOTH_WINDOW / 2;
-  const inst = f.instances;
-  let lo = 0, hi = inst.length;
-  while (lo < hi) { const m = (lo + hi) >> 1; if (inst[m].s < a - f.maxDur) lo = m + 1; else hi = m; }
-  for (let k = lo; k < inst.length && inst[k].s <= b; k++) {
-    const it = inst[k];
-    const overlap = Math.min(it.e, b) - Math.max(it.s, a);
-    if (overlap > 0) counts[it.p.line] += overlap / SMOOTH_WINDOW;
-  }
-  return counts;
-}
-
-let rescheduleTimer = null;
-function changeTrains(i, delta) {
-  if (!App.feed) return;
-  const cfg = Music.lineCfg()[i];
-  const now = cfg.fixed != null ? cfg.fixed : Math.round(smoothedCounts()[i]);
-  const N = Math.max(0, Math.min(80, now + delta));
-  Music.updateLine(i, { fixed: N });
-  updateCounts();
-  clearTimeout(rescheduleTimer);
-  rescheduleTimer = setTimeout(reschedule, 120);
-  setStatus(`Line ${App.feed.lines[i].name}: ${N === 0 ? 'no trains' : `${N} train${N > 1 ? 's' : ''}, evenly spaced, all day`} — Reset trains goes back to the timetable`);
-}
-function reschedule() {
-  try {
-    GTFS.schedule(App.feed, Music.lineCfg().map(c => c.fixed));
-    Music.refresh();
-    showStats();
-  } catch (e) { fail(e); }
-}
-function resetTrains() {
-  Music.lineCfg().forEach((c, i) => Music.updateLine(i, { fixed: null }));
-  reschedule();
-  updateCounts();
-  setStatus('Back to the timetable');
-}
-function updateCounts() {
-  if (!App.feed) return;
-  const rows = document.querySelectorAll('#lines .line-row');
-  const cfgs = Music.lineCfg();
-  const avg = smoothedCounts();
-  rows.forEach((row, i) => {
-    const fixed = cfgs[i] && cfgs[i].fixed != null;
-    const c = row.querySelector('.count');
-    c.textContent = fixed ? cfgs[i].fixed : Math.round(avg[i]);
-    c.classList.toggle('changed', fixed);
-    row.querySelector('.trains').title = fixed
-      ? `${cfgs[i].fixed} trains, evenly spaced, all day (Reset trains = back to the timetable)`
-      : 'Trains running on average around this time (from the timetable)';
+// ---------- tab 2: sample ----------
+function renderSampleLines() {
+  const list = $('sample-lines');
+  list.innerHTML = '';
+  const SL = Music.sampleLines();
+  App.feed.lines.forEach((L, i) => {
+    const s = SL[i];
+    const wrap = document.createElement('div');
+    wrap.className = 's-row';
+    const row = soundRow(L, s, {
+      title: `${L.long || L.name} — click to launch one more train`,
+      onNote: m => { Music.updateSampleLine(i, { midi: m }); Music.preview(i, 'S'); },
+      onInst: v => { Music.updateSampleLine(i, { instrument: v }); Music.preview(i, 'S'); },
+      onSwatch: () => { sampleTrains(i, +1); Music.preview(i, 'S'); },
+      isOn: () => s.on,
+      onToggle: () => Music.updateSampleLine(i, { on: !s.on }),
+    });
+    wrap.appendChild(row);
+    const ctl = document.createElement('div');
+    ctl.className = 'ctl';
+    ctl.innerHTML = `
+      <span class="hint" style="margin:0">${s.S} st.</span>
+      <span class="trains" title="Trains on this line">
+        <button class="step minus" aria-label="One train less">−</button><b class="count">${s.n}</b><button class="step plus" aria-label="One train more">+</button>
+      </span>
+      <label class="bpm">BPM <input type="number" class="sbpm" min="10" max="400" step="1" value="${s.bpm}"></label>
+      <button class="inv ${s.invert ? 'on' : ''}" title="Run the trains the other way">⇄</button>`;
+    ctl.querySelector('.plus').addEventListener('click', () => sampleTrains(i, +1));
+    ctl.querySelector('.minus').addEventListener('click', () => sampleTrains(i, -1));
+    const bpm = ctl.querySelector('.sbpm');
+    bpm.addEventListener('change', () => {
+      const v = Math.max(10, Math.min(400, parseInt(bpm.value, 10) || s.bpm));
+      bpm.value = v;
+      Music.updateSampleLine(i, { bpm: v });
+    });
+    const inv = ctl.querySelector('.inv');
+    inv.addEventListener('click', () => { Music.updateSampleLine(i, { invert: !s.invert }); inv.classList.toggle('on', s.invert); });
+    if (!s.S) ctl.querySelector('.hint').textContent = 'no route';
+    wrap.appendChild(ctl);
+    wrap.paintAll = () => { row.paint(); ctl.querySelector('.count').textContent = s.n; bpm.value = s.bpm; inv.classList.toggle('on', s.invert); };
+    list.appendChild(wrap);
   });
 }
+function sampleTrains(i, delta) {
+  const s = Music.sampleLines()[i];
+  if (!s) return;
+  const n = Math.max(0, Math.min(64, s.n + delta));
+  Music.updateSampleLine(i, { n });
+  if (delta > 0 && !s.on) Music.updateSampleLine(i, { on: true });   // launching a train = you want to hear it
+  const wrap = $('sample-lines').children[i];
+  if (wrap && wrap.paintAll) wrap.paintAll();
+  setStatus(`Line ${App.feed.lines[i].name}: ${n} train${n === 1 ? '' : 's'}`);
+}
+function sampleAll(patch) {
+  Music.sampleLines().forEach((s, i) => Music.updateSampleLine(i, patch(s)));
+  [...$('sample-lines').children].forEach(w => w.paintAll && w.paintAll());
+  App.redrawLines = true;
+}
+
+// map click on a line: listen tab toggles its sound; sample tab launches one more train
+function clickLine(i) {
+  if (App.tab === 'sample') { sampleTrains(i, +1); Music.preview(i, 'S'); return; }
+  const c = Music.lineCfg()[i];
+  Music.updateLine(i, { mute: !c.mute });
+  renderLines();
+  App.redrawLines = true;
+  if (!c.mute) Music.preview(i);
+  setStatus(`Line ${App.feed.lines[i].name}: sound ${c.mute ? 'off' : 'on'}`);
+}
+
+function setTab(tab) {
+  if (tab !== App.tab) { Music.pause(); Music.pauseSample(); }
+  App.tab = tab;
+  $('tab-listen').classList.toggle('on', tab === 'listen');
+  $('tab-sample').classList.toggle('on', tab === 'sample');
+  $('tab-listen').setAttribute('aria-selected', tab === 'listen');
+  $('tab-sample').setAttribute('aria-selected', tab === 'sample');
+  $('pane-listen').hidden = tab !== 'listen';
+  $('pane-sample').hidden = tab !== 'sample';
+  App.redrawLines = true;
+  paintModes();
+}
+
 function showStats() {
   const s = App.feed.stats;
+  const sk = s.skipped || {};
+  const skippedStops = (sk.noTime || 0) + (sk.noCoords || 0) + (sk.backwards || 0);
   $('stats').textContent = `${s.lines} lines · ${s.trips.toLocaleString()} trains · ${s.notes.toLocaleString()} station arrivals` +
-    (s.droppedLines ? ` · ${s.droppedLines} quieter lines hidden` : '') + (s.usedAllServices ? ' · (calendar didn’t match, using all services)' : '');
+    (s.droppedLines ? ` · ${s.droppedLines} quieter lines hidden` : '') +
+    (skippedStops ? ` · ${skippedStops.toLocaleString()} stops without usable data skipped` : '') +
+    (s.usedAllServices ? ' · (calendar didn’t match, using all services)' : '');
 }
 // label that fits the colour button: "L2-L2R" -> "L2R"; short names like "PM-C" stay as they are
 function short(n) {
@@ -279,12 +355,6 @@ function contrast(hex) {
   if (h.length < 6) return '#000';
   const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
   return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? '#000' : '#fff';
-}
-function setAllMute(m) {
-  const cfgs = Music.lineCfg();
-  cfgs.forEach((c, i) => Music.updateLine(i, { mute: m, solo: false }));
-  renderLines();
-  App.redrawLines = true;
 }
 
 // ---------- wiring ----------
@@ -318,7 +388,11 @@ function initUI() {
   $('day').addEventListener('change', rebuild);
   $('maxlines').addEventListener('change', rebuild);
 
-  // two ways to play: the whole day, or a loop around one moment
+  // tabs
+  $('tab-listen').addEventListener('click', () => setTab('listen'));
+  $('tab-sample').addEventListener('click', () => setTab('sample'));
+
+  // tab 1: two ways to play — the whole day, or a loop around one moment
   $('play-day').addEventListener('click', () => (Music.isPlaying() && App.mode === 'day') ? Music.pause() : startMode('day'));
   $('play-moment').addEventListener('click', () => (Music.isPlaying() && App.mode === 'moment') ? Music.pause() : startMode('moment'));
   Music.onChange(paintModes);
@@ -327,6 +401,20 @@ function initUI() {
     if (App.mode === 'moment') applyLoop(true);
   });
   $('window').addEventListener('change', () => { if (App.mode === 'moment') applyLoop(true); });
+  $('mute-all').addEventListener('click', () => setAllMute(true));
+  $('unmute-all').addEventListener('click', () => setAllMute(false));
+
+  // tab 2: the sampler
+  $('play-sample').addEventListener('click', () => Music.isSamplePlaying() ? Music.pauseSample() : startSample());
+  const sbpm = $('sample-bpm');
+  sbpm.addEventListener('input', () => { $('sample-bpm-out').textContent = sbpm.value; sampleAll(() => ({ bpm: parseInt(sbpm.value, 10) })); });
+  $('s-mute-all').addEventListener('click', () => sampleAll(() => ({ on: false })));
+  $('s-unmute-all').addEventListener('click', () => sampleAll(() => ({ on: true })));
+  $('s-reset').addEventListener('click', () => {
+    sampleAll(() => ({ n: SAMPLE_DEFAULT.n, bpm: parseInt(sbpm.value, 10), invert: SAMPLE_DEFAULT.invert }));
+    setStatus('Sample reset: 2 trains per line, same BPM, normal direction');
+  });
+
   $('reset-view').addEventListener('click', () => resetView());
   // dropdowns keep keyboard focus after a choice, which would swallow Space / R
   document.addEventListener('change', e => { if (e.target.tagName === 'SELECT') e.target.blur(); });
@@ -351,10 +439,6 @@ function initUI() {
 
   ['bpm', 'speed'].forEach(id => $(id).addEventListener('input', dayLen));
 
-  $('mute-all').addEventListener('click', () => setAllMute(true));
-  $('unmute-all').addEventListener('click', () => setAllMute(false));
-  $('reset-trains').addEventListener('click', resetTrains);
-  setInterval(updateCounts, 400);
   // a share link pasted into an already-open tab only changes the #hash
   window.addEventListener('hashchange', () => { const s = readShareHash(); if (s) applySetup(s); });
 
@@ -368,6 +452,13 @@ function initUI() {
   $('load').addEventListener('click', () => $('maki-file').click());
   $('maki-file').addEventListener('change', e => { if (e.target.files[0]) loadMakiFile(e.target.files[0]); e.target.value = ''; });
 
+  citySel.addEventListener('change', () => {
+    const u = new URL(location.href);
+    if (citySel.value) u.searchParams.set('city', citySel.value); else u.searchParams.delete('city');
+    u.hash = '';
+    history.replaceState(null, '', u);
+  });
+
   // start from a shared link (#s=…), else ?city=XX, else Buenos Aires
   const shared = readShareHash();
   if (shared) { applySetup(shared); return; }
@@ -375,15 +466,9 @@ function initUI() {
   const first = CITIES.find(c => want && c.id.toLowerCase() === want.toLowerCase()) || CITIES[0];
   citySel.value = first.id;
   loadCity(first);
-  citySel.addEventListener('change', () => {
-    const u = new URL(location.href);
-    if (citySel.value) u.searchParams.set('city', citySel.value); else u.searchParams.delete('city');
-    u.hash = '';
-    history.replaceState(null, '', u);
-  });
 }
 
-// ---------- play modes ----------
+// ---------- play ----------
 function startMode(mode) {
   if (!App.feed) return;
   App.mode = mode;
@@ -391,8 +476,12 @@ function startMode(mode) {
   else Music.setLoop(null);
   Music.play();
   paintModes();
-  const anyOn = Music.lineCfg().some(c => !c.mute);
-  if (!anyOn) setStatus('All lines are muted — turn some on with 🔇 (or Unmute all) to hear them');
+  if (!Music.lineCfg().some(c => !c.mute)) setStatus('All lines are muted — turn some on (or Unmute all) to hear them');
+}
+function startSample() {
+  if (!App.feed) return;
+  Music.playSample();
+  if (!Music.sampleLines().some(s => s.on && s.n > 0)) setStatus('All sample lines are off — turn some on (or All on) to hear them');
 }
 // loop [time, time + window]; jump=true also moves the playhead to the loop start
 function applyLoop(jump) {
@@ -404,11 +493,14 @@ function applyLoop(jump) {
 }
 function paintModes() {
   const playing = Music.isPlaying();
-  const day = $('play-day'), mom = $('play-moment');
+  const day = $('play-day'), mom = $('play-moment'), smp = $('play-sample');
   day.classList.toggle('on', playing && App.mode === 'day');
   mom.classList.toggle('on', playing && App.mode === 'moment');
   day.textContent = playing && App.mode === 'day' ? '❚❚ Pause' : '▶ Play the day';
   mom.textContent = playing && App.mode === 'moment' ? '❚❚ Pause' : '⟳ Play a moment';
+  const sp = Music.isSamplePlaying();
+  smp.classList.toggle('on', sp);
+  smp.textContent = sp ? '❚❚ Pause the sample' : '▶ Play the sample';
   const loop = Music.getLoop();
   const fmt = s => `${String(Math.floor(s / 3600) % 24).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}`;
   $('mode-note').textContent = App.mode === 'moment' && loop
@@ -437,13 +529,13 @@ function parseNote(n) {
 function currentSetup() {
   if (!App.feed) return null;
   const cfgs = Music.lineCfg();
-  const lines = {};
+  const SL = Music.sampleLines();
+  const lines = {}, sampleLines = {};
   App.feed.lines.forEach((L, i) => {
     const c = cfgs[i];
-    lines[L.name] = { note: midiName(c.midi), instrument: c.instrument };
-    if (c.solo) lines[L.name].solo = true;
-    lines[L.name].mute = !!c.mute;
-    if (c.fixed != null) lines[L.name].fixedTrains = c.fixed;
+    lines[L.name] = { note: midiName(c.midi), instrument: c.instrument, mute: !!c.mute };
+    const s = SL[i];
+    if (s) sampleLines[L.name] = { note: midiName(s.midi), instrument: s.instrument, on: !!s.on, trains: s.n, bpm: s.bpm, invert: !!s.invert };
   });
   const S = Music.settings;
   return {
@@ -452,6 +544,7 @@ function currentSetup() {
     title: App.city.name,
     city: CITIES.some(c => c.id === App.city.id) ? App.city.id : null,
     feedName: App.city.name,
+    tab: App.tab,
     date: $('day').value ? parseInt($('day').value, 10) : null,
     groups: [...document.querySelectorAll('#types input:checked')].map(i => i.value),
     maxLines: parseInt($('maxlines').value, 10) || 60,
@@ -460,6 +553,7 @@ function currentSetup() {
     window: parseInt($('window').value, 10),
     settings: { bpm: S.bpm, minutesPerBeat: S.minutesPerBeat, scale: S.scale, range: S.range, perLine: S.perLine, volume: S.volume },
     lines,
+    sample: { bpm: parseInt($('sample-bpm').value, 10), lines: sampleLines },
   };
 }
 
@@ -476,7 +570,9 @@ function applySettings(s) {
 async function applySetup(setup) {
   if (!setup || setup.maki !== 1) { setStatus('⚠️ Not a valid .maki setup'); return; }
   Music.pause();
+  Music.pauseSample();
   applySettings(setup.settings);
+  if (setup.sample && setup.sample.bpm > 0) { $('sample-bpm').value = setup.sample.bpm; $('sample-bpm-out').textContent = setup.sample.bpm; }
   App.pending = setup;
   const city = CITIES.find(c => c.id === setup.city);
   if (city) {
@@ -525,7 +621,7 @@ function saveMaki() {
   const hhmm = new Date().toTimeString().slice(0, 5).replace(':', '');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' }));
-  a.download = `${slug}-${hhmm}.maki`;
+  a.download = `${slug}-${s.tab}-${hhmm}.maki`;
   document.body.appendChild(a);
   a.click();
   a.remove();

@@ -105,6 +105,19 @@
     }
     .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
     .share-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; margin: 18px 0 10px; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+    .tab { font: inherit; font-weight: 600; padding: 9px; border: 0; background: var(--field); color: var(--muted); cursor: pointer; }
+    .tab.on { background: var(--accent); color: var(--accent-ink); }
+    .lines-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+    .lines-head h2 { margin: 8px 0; }
+    .line-row.listen { grid-template-columns: 44px 54px 40px 1fr 26px; }
+    .s-row { border-bottom: 1px solid var(--rule); padding: 4px 0 6px; }
+    .s-row .line-row { grid-template-columns: 44px 54px 40px 1fr 26px; margin: 0; }
+    .s-row .ctl { display: grid; grid-template-columns: 44px 76px 1fr 34px; gap: 4px; align-items: center; margin-top: 4px; }
+    .s-row .ctl .bpm { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+    .s-row .ctl input[type=number] { width: 56px; padding: 3px 4px; }
+    .inv { height: 28px; border: 1px solid var(--rule); border-radius: 6px; background: var(--field); color: var(--ink); cursor: pointer; font-size: 15px; }
+    .inv.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-top: 8px; }
 
     body.dragging #map::after {
@@ -176,33 +189,69 @@
     </details>
     <div id="stats"></div>
 
-    <h2>2 · Play</h2>
-    <div class="modes">
-      <button id="play-day" class="mode">▶ Play the day</button>
-      <button id="play-moment" class="mode">⟳ Play a moment</button>
+    <div class="tabs" role="tablist">
+      <button class="tab on" id="tab-listen" role="tab" aria-selected="true">🎧 Listen</button>
+      <button class="tab" id="tab-sample" role="tab" aria-selected="false">🎛️ Sample</button>
     </div>
-    <div class="transport">
-      <span id="clock-readout">--:--</span>
-      <span id="mode-note"></span>
-    </div>
-    <label class="row">Time <input type="range" id="scrub" min="300" max="1440" value="420"><span></span></label>
-    <label class="row">Moment length
-      <select id="window" style="grid-column: span 2">
-        <option value="10">10 minutes</option>
-        <option value="20">20 minutes</option>
-        <option value="30" selected>30 minutes</option>
-        <option value="60">1 hour</option>
-        <option value="120">2 hours</option>
-      </select>
-    </label>
-    <label class="row">BPM <input type="range" id="bpm" min="40" max="200" step="1"><output id="bpm-out"></output></label>
-    <label class="row">Speed <input type="range" id="speed" min="0.25" max="10" step="0.25"><output id="speed-out"></output></label>
-    <div id="daylen"></div>
+
+    <!-- TAB 1: the system as it really runs -->
+    <section id="pane-listen" class="pane">
+      <p class="hint" style="margin-top:0">The real timetable. Choose what each line sounds like; the trains run as scheduled.</p>
+      <div class="modes">
+        <button id="play-day" class="mode">▶ Play the day</button>
+        <button id="play-moment" class="mode">⟳ Play a moment</button>
+      </div>
+      <div class="transport">
+        <span id="clock-readout">--:--</span>
+        <span id="mode-note"></span>
+      </div>
+      <label class="row">Time <input type="range" id="scrub" min="300" max="1440" value="420"><span></span></label>
+      <label class="row">Moment length
+        <select id="window" style="grid-column: span 2">
+          <option value="10">10 minutes</option>
+          <option value="20">20 minutes</option>
+          <option value="30" selected>30 minutes</option>
+          <option value="60">1 hour</option>
+          <option value="120">2 hours</option>
+        </select>
+      </label>
+      <label class="row">BPM <input type="range" id="bpm" min="40" max="200" step="1"><output id="bpm-out"></output></label>
+      <label class="row">Speed <input type="range" id="speed" min="0.25" max="10" step="0.25"><output id="speed-out"></output></label>
+      <div id="daylen"></div>
+      <label class="row">Notes / line <input type="range" id="perline" min="1" max="4" step="1"><output id="perline-out"></output></label>
+      <div class="lines-head"><h2>Lines</h2>
+        <span class="share-row">
+          <button class="pill" id="mute-all">🔇 Mute all</button>
+          <button class="pill" id="unmute-all">🔊 Unmute all</button>
+        </span>
+      </div>
+      <p class="hint" style="margin-top:0"><b>All lines start muted</b>: turn on the ones you want. Note = first station; going along the line climbs the scale. Click a line (here or on the map) to turn it on/off.</p>
+      <div id="lines"></div>
+    </section>
+
+    <!-- TAB 2: the sampler — every line becomes a loop you design -->
+    <section id="pane-sample" class="pane" hidden>
+      <p class="hint" style="margin-top:0">Every line becomes a loop. Trains go from the first to the last station, <b>one station per beat</b> at the line's own BPM, then start again. Different BPMs make polyrhythms.</p>
+      <div class="modes" style="grid-template-columns:1fr">
+        <button id="play-sample" class="mode">▶ Play the sample</button>
+      </div>
+      <label class="row">All lines BPM <input type="range" id="sample-bpm" min="20" max="240" step="1" value="90"><output id="sample-bpm-out">90</output></label>
+      <div class="lines-head"><h2>Lines</h2>
+        <span class="share-row">
+          <button class="pill" id="s-mute-all">🔇 All off</button>
+          <button class="pill" id="s-unmute-all">🔊 All on</button>
+          <button class="pill" id="s-reset">↺ Reset</button>
+        </span>
+      </div>
+      <p class="hint" style="margin-top:0"><b>− n +</b> trains on the line · <b>BPM</b> stations per minute · <b>⇄</b> run the other way. Click a line on the map to launch one more train.</p>
+      <div id="sample-lines"></div>
+    </section>
+
+    <h2>Sound</h2>
     <label class="row">Scale <select id="scale" style="grid-column: span 2"></select></label>
     <label class="row">Melody range <input type="range" id="range" min="1" max="15" step="1"><output id="range-out"></output></label>
-    <label class="row">Notes / line <input type="range" id="perline" min="1" max="4" step="1"><output id="perline-out"></output></label>
     <label class="row">Volume <input type="range" id="volume" min="-40" max="0" step="1"><output id="volume-out"></output></label>
-    <p class="hint">Space = play/pause · scroll to zoom · drag to pan · R = reset view. <b>Play a moment</b> loops the time you pick, so you can compare 7 am with 3 pm.</p>
+    <p class="hint">Space = play/pause · scroll to zoom · drag to pan · R = reset view</p>
 
     <h2>Save &amp; share</h2>
     <div class="share-row">
@@ -211,18 +260,7 @@
       <button class="pill" id="load">📂 Load .maki</button>
       <input type="file" id="maki-file" accept=".maki,.json" hidden>
     </div>
-    <p class="hint">Stores the city, BPM, speed, scale, time and every line's note, instrument, sound on/off and number of trains, so whoever opens it hears exactly what you hear. You can also drop a .maki file on the page.</p>
-
-    <div class="lines-head">
-      <h2>3 · Lines → notes</h2>
-    </div>
-    <div class="share-row">
-      <button class="pill" id="mute-all">🔇 Mute all</button>
-      <button class="pill" id="unmute-all">🔊 Unmute all</button>
-      <button class="pill" id="reset-trains">↺ Reset trains</button>
-    </div>
-    <p class="hint"><b>All lines start muted</b>: turn on the ones you want with 🔇, or Unmute all. Note = the first station; going along the line climbs the scale. <b>− n +</b> = trains running now. <b>Click a line</b> (here or on the map) to launch one more train.</p>
-    <div id="lines"></div>
+    <p class="hint">Saves both tabs (the city, BPMs, scale, time, and every line's note, instrument, on/off, trains, speed and direction), so whoever opens it hears exactly what you hear. You can also drop a .maki file on the page.</p>
   </aside>
 
   <main id="map"><button id="reset-view" title="Fit the whole network (R)">⟲ Reset view</button></main>
