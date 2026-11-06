@@ -1,0 +1,17 @@
+# GitHub Pages: keep the published site small. These files stay in the repo
+# but are not needed by the web app, so they are not uploaded to Pages.
+exclude:
+  - "*.mp4"
+  - "*.R"
+  - "*.Rproj"
+  - "sketch.properties"
+  - "new test.txt"
+  - "libraries/"
+  - "satelite_image/"
+  - "assets/CDMX/GTFS_all/"
+  - "assets/CDMX/config - Copy.json"
+  - "assets/SDC/gtfs.zip"
+  - "assets/SDC/CLEAN.R"
+  - "assets/BE/GTFS/be.zip"
+  - "assets/NYC/test.txt"
+  - "02_subte_music_gtfs.md"
